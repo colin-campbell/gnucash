@@ -1,4 +1,5 @@
 set(account_DATA
+    bas_2019.gnucash-xea
 	bas_2012.gnucash-xea
 	acctchrt_common.gnucash-xea)
 

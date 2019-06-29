@@ -256,8 +256,8 @@ gnc_get_ea_locale_dir(const char *top_dir)
             locale = g_strdup ("C");
         }
     }
-#elif defined MAC_INTEGRATION
-    locale = mac_locale();
+//#elif defined MAC_INTEGRATION
+//    locale = mac_locale();
 # else
     locale = g_strdup(setlocale(LC_MESSAGES, NULL));
 #endif

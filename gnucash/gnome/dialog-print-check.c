@@ -609,8 +609,11 @@ gnc_ui_print_restore_dialog(PrintCheckDialog *pcd)
     if (guid == NULL)
         gtk_combo_box_set_active(GTK_COMBO_BOX(pcd->format_combobox), 0);
     else if (strcmp(guid, "custom") == 0)
+    {
         gtk_combo_box_set_active(GTK_COMBO_BOX(pcd->format_combobox),
                                  pcd->format_max - 1);
+        g_free (guid);
+    }
     else
     {
         model = gtk_combo_box_get_model(GTK_COMBO_BOX(pcd->format_combobox));
@@ -622,7 +625,9 @@ gnc_ui_print_restore_dialog(PrintCheckDialog *pcd)
         {
             gtk_combo_box_set_active(GTK_COMBO_BOX(pcd->format_combobox), 0);
         }
+        g_free (guid);
     }
+
     active = gnc_prefs_get_int(GNC_PREFS_GROUP, GNC_PREF_CHECK_POSITION);
 
     /* If the check format used last time no longer exists, then the saved check
@@ -1510,11 +1515,11 @@ read_one_check_directory(PrintCheckDialog *pcd, GtkListStore *store,
             gtk_message_dialog_format_secondary_text
             (GTK_MESSAGE_DIALOG(dialog),
              /* Translators:
-              * %1$s is the type of the first check format
-              *  (user defined or application defined);
-              * %2$s is the filename of that format;
-              * %3$s the type of the other check format; and
-              * %4$s the filename of that other format.      */
+                %1$s is the type of the first check format
+                 (user defined or application defined);
+                %2$s is the filename of that format;
+                %3$s the type of the other check format; and
+                %4$s the filename of that other format.      */
              _("The GUIDs in the %s check format file '%s' and "
                "the %s check format file '%s' match."),
              existing->group, existing->filename,
@@ -1651,8 +1656,8 @@ gnc_ui_print_check_dialog_create(GtkWidget *parent,
     pcd->builder = builder;
     pcd->dialog = GTK_WIDGET(gtk_builder_get_object (builder, "print_check_dialog"));
 
-    // Set the style context for this dialog so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(pcd->dialog), "GncPrintCheckDialog");
+    // Set the name for this dialog so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(pcd->dialog), "gnc-id-print-check");
 
     /* now pick out the relevant child widgets */
     pcd->format_combobox = GTK_WIDGET(gtk_builder_get_object (builder, "check_format_combobox"));
@@ -2670,7 +2675,7 @@ gnc_ui_print_check_response_cb(GtkDialog *dialog,
     switch (response)
     {
     case GTK_RESPONSE_HELP:
-        gnc_gnome_help(HF_HELP, HL_PRINTCHECK);
+        gnc_gnome_help (GTK_WINDOW(dialog), HF_HELP, HL_PRINTCHECK);
         return;
 
     case GTK_RESPONSE_OK:

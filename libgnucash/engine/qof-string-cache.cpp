@@ -25,13 +25,13 @@
  *   Author: Linas Vepstas (linas@linas.org)                        *
  *   Author: Phil Longstaff (phil.longstaff@yahoo.ca)               *
 \********************************************************************/
+#include <glib.h>
 
 extern "C"
 {
 #include <config.h>
 
 #include <ctype.h>
-#include <glib.h>
 #include <stdlib.h>
 #include <string.h>
 #include "qof.h"

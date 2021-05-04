@@ -1,5 +1,5 @@
 /********************************************************************\
- * numcell.c -- number handling cell incl. accelarator key support  *
+ * numcell.c -- number handling cell incl. accelerator key support  *
  *                                                                  *
  * This program is free software; you can redistribute it and/or    *
  * modify it under the terms of the GNU General Public License as   *
@@ -92,6 +92,8 @@ gnc_num_cell_modify_verify (BasicCell *_cell,
         /* then just accept the proposed change */
     {
         gnc_basic_cell_set_value_internal (&cell->cell, newval);
+        // Remove any selection.
+        *end_selection = *start_selection = *cursor_position;
         return;
     }
 

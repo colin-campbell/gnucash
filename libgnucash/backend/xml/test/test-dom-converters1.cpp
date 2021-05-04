@@ -21,20 +21,21 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  *  02110-1301, USA.
  */
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
 
-#include <stdlib.h>
 #include <string.h>
-
-#include <glib.h>
 
 #include "test-engine-stuff.h"
 #include "cashobjects.h"
 #include "gnc-engine.h"
 #include "gnc-commodity.h"
 }
+
+#include <cstdlib>
 
 #include "test-file-stuff.h"
 #include "gnc-xml-helper.h"
@@ -251,7 +252,7 @@ test_dom_tree_to_guid (void)
 
         xmlFreeNode (test_node);
         g_free (test_guid1);
-        g_free (test_guid2);
+        guid_free (test_guid2);
     }
 }
 

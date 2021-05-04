@@ -41,6 +41,7 @@
 #define QOF_BOOK_H
 
 #ifdef __cplusplus
+#include <glib.h> //To preempt it being included extern "C" in a later header.
 extern "C"
 {
 #endif
@@ -210,7 +211,7 @@ void qof_book_destroy (QofBook *book);
 /** Close a book to editing.
 
 It is up to the application to check this flag,
-and once marked closed, books cannnot be marked as open.
+and once marked closed, books cannot be marked as open.
 */
 void qof_book_mark_closed (QofBook *book);
 
@@ -223,7 +224,7 @@ void qof_book_mark_closed (QofBook *book);
  *  type.
  *
  *  If the collection doesn't yet exist for the indicated type,
- *  it is created.  Thus, this routine is gaurenteed to return
+ *  it is created.  Thus, this routine is guaranteed to return
  *  a non-NULL value.  (Unless the system malloc failed (out of
  *  memory) in which case what happens??).
  */
@@ -375,6 +376,7 @@ char *qof_book_get_counter_format (const QofBook *book,
 
 const char* qof_book_get_string_option(const QofBook* book, const char* opt_name);
 void qof_book_set_string_option(QofBook* book, const char* opt_name, const char* opt_val);
+const GncGUID* qof_book_get_guid_option(QofBook* book, GSList* path);
 void qof_book_option_frame_delete (QofBook *book, const char* opt_name);
 
 /** Access functions for reading and setting the used-features on this book.

@@ -20,17 +20,18 @@
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  *                                                                  *
  ********************************************************************/
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
 
-#include <glib.h>
 #include <string.h>
 
-#include "gnc-xml-helper.h"
 #include <gnc-engine.h>
 }
 
+#include "gnc-xml-helper.h"
 #include "sixtp-utils.h"
 #include "sixtp-dom-parsers.h"
 #include <kvp-frame.hpp>

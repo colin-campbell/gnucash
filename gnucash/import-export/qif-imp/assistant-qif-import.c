@@ -282,7 +282,7 @@ void gnc_ui_qif_import_summary_page_prepare (GtkAssistant *assistant, gpointer u
  * generalizes the code shared whenever any QIF -> GNC mapper is
  * updating it's LIST STORE.  It asks the Scheme side to guess some account
  * translations and then shows the account name and suggested
- * translation in the Accounts page view (acount picker list).
+ * translation in the Accounts page view (account picker list).
  ****************************************************************/
 static void
 update_account_picker_page (QIFImportWindow * wind, SCM make_display,
@@ -347,7 +347,7 @@ update_account_picker_page (QIFImportWindow * wind, SCM make_display,
 
     gtk_tree_selection_select_path (selection, path);
 
-    /* scroll the tree view so the selection is visable if there are rows */
+    /* scroll the tree view so the selection is visible if there are rows */
     if (gtk_tree_model_iter_n_children (GTK_TREE_MODEL(store), NULL) > 0)
         gtk_tree_view_scroll_to_cell (GTK_TREE_VIEW(view), path, NULL, TRUE, 0.5, 0.0);
     gtk_tree_path_free (path);
@@ -903,7 +903,7 @@ new_security_notebook_page (SCM security_hash_key, gnc_commodity *comm, QIFImpor
     comm_nb_page->name_entry = gtk_entry_new ();
     gtk_entry_set_text (GTK_ENTRY(comm_nb_page->name_entry),
                         gnc_commodity_get_fullname (comm));
-    label = gtk_label_new_with_mnemonic (_("_Name or description:"));
+    label = gtk_label_new_with_mnemonic (_("_Name or description"));
     gtk_label_set_mnemonic_widget (GTK_LABEL(label), comm_nb_page->name_entry);
     gnc_label_set_alignment (label, 0, 0.5);
 
@@ -927,7 +927,7 @@ new_security_notebook_page (SCM security_hash_key, gnc_commodity *comm, QIFImpor
     gtk_entry_set_text (GTK_ENTRY(comm_nb_page->mnemonic_entry),
                        gnc_commodity_get_mnemonic (comm));
     label = gtk_label_new_with_mnemonic (
-                _("_Ticker symbol or other abbreviation:"));
+                _("_Ticker symbol or other abbreviation"));
     gtk_label_set_mnemonic_widget (GTK_LABEL(label), comm_nb_page->mnemonic_entry);
     gnc_label_set_alignment (label, 0, 0.5);
 
@@ -961,7 +961,7 @@ new_security_notebook_page (SCM security_hash_key, gnc_commodity *comm, QIFImpor
 
     gnc_cbwe_add_completion (GTK_COMBO_BOX(comm_nb_page->namespace_combo));
     label = gtk_label_new_with_mnemonic (
-                _("_Exchange or abbreviation type:"));
+                _("_Exchange or abbreviation type"));
     gtk_label_set_mnemonic_widget (GTK_LABEL(label), comm_nb_page->namespace_combo);
     gnc_label_set_alignment (label, 0, 0.5);
 
@@ -1111,7 +1111,8 @@ gnc_ui_qif_import_convert_undo (QIFImportWindow * wind)
 
     /* Undo the conversion. */
     if (wind->imported_account_tree != SCM_BOOL_F)
-        gfec_apply (undo, wind->imported_account_tree, _gfec_error_handler);
+        gfec_apply (undo, scm_list_1 (wind->imported_account_tree),
+                    _gfec_error_handler);
 
     /* There's no imported account tree any more. */
     scm_gc_unprotect_object (wind->imported_account_tree);
@@ -1185,7 +1186,7 @@ refresh_old_transactions (QIFImportWindow * wind, int selection)
             }
 
             gtk_list_store_append (store, &iter);
-            qof_print_date_buff (datebuff, sizeof (datebuff),
+            qof_print_date_buff (datebuff, MAX_DATE_LENGTH,
                                 xaccTransRetDatePosted (gnc_xtn));
             gtk_list_store_set
             (store, &iter,
@@ -1370,7 +1371,7 @@ gnc_ui_qif_import_cancel_cb (GtkAssistant *gtkassistant, gpointer user_data)
     if (!g_strcmp0 (pagename, "summary_page"))
     {
         /* Hitting the window close button on the summary page should not
-           invoke a cancel action. The import has finised at that point. */
+           invoke a cancel action. The import has finished at that point. */
         gnc_ui_qif_import_close_cb (gtkassistant, user_data);
     }
     else
@@ -1421,9 +1422,9 @@ gnc_ui_qif_import_close_cb (GtkAssistant *gtkassistant, gpointer user_data)
 SCM
 gnc_ui_qif_import_assistant_get_mappings (QIFImportWindow * w)
 {
-    return SCM_LIST3(w->acct_map_info,
-                     w->cat_map_info,
-                     w->memo_map_info);
+    return scm_list_3 (w->acct_map_info,
+                       w->cat_map_info,
+                       w->memo_map_info);
 }
 
 
@@ -2448,7 +2449,7 @@ gnc_ui_qif_import_account_rematch_cb (GtkButton *button, gpointer user_data)
 
 
 /*******************************************
- * Page 8 - Catagory Doc. Page Procedures
+ * Page 8 - Category Doc. Page Procedures
  *******************************************/
 
 /********************************************************************
@@ -2484,7 +2485,7 @@ gnc_ui_qif_import_catagory_doc_prepare (GtkAssistant *assistant,
 
 
 /******************************************
- * Page 9 - Catagory Match Page Procedures
+ * Page 9 - Category Match Page Procedures
  ******************************************/
 
 /****************************************************************
@@ -3037,15 +3038,16 @@ gnc_ui_qif_import_convert_progress_start_cb (GtkButton * button,
     /* This step will fill 70% of the bar. */
     gnc_progress_dialog_push (wind->convert_progress, 0.7);
     retval = scm_apply (qif_to_gnc,
-                       SCM_LIST8(wind->imported_files,
-                                 wind->acct_map_info,
-                                 wind->cat_map_info,
-                                 wind->memo_map_info,
-                                 wind->security_hash,
-                                 scm_from_utf8_string (currname ? currname : ""),
-                                 wind->transaction_status,
-                                 progress),
-                       SCM_EOL);
+                        scm_list_n (wind->imported_files,
+                                    wind->acct_map_info,
+                                    wind->cat_map_info,
+                                    wind->memo_map_info,
+                                    wind->security_hash,
+                                    scm_from_utf8_string (currname ? currname : ""),
+                                    wind->transaction_status,
+                                    progress,
+                                    SCM_UNDEFINED),
+                        SCM_EOL);
     gnc_progress_dialog_pop (wind->convert_progress);
 
     if (retval == SCM_BOOL_T)
@@ -3303,7 +3305,7 @@ gnc_ui_qif_import_duplicates_match_prepare (GtkAssistant *assistant,
             gdouble amount_gd = 0;
             time64 send_time = 0;
             char datebuff [MAX_DATE_LENGTH + 1];
-            memset (datebuff, 0, sizeof (datebuff));
+            memset (datebuff, 0, MAX_DATE_LENGTH);
             current_xtn = SCM_CAAR(duplicates);
 #define FUNC_NAME "xaccTransCountSplits"
             gnc_xtn = SWIG_MustGetPtr (current_xtn,
@@ -3322,7 +3324,7 @@ gnc_ui_qif_import_duplicates_match_prepare (GtkAssistant *assistant,
             }
             gtk_list_store_append (store, &iter);
             send_time = xaccTransRetDatePosted (gnc_xtn);
-            qof_print_date_buff (datebuff, sizeof (datebuff), send_time);
+            qof_print_date_buff (datebuff, MAX_DATE_LENGTH, send_time);
             gtk_list_store_set
             (store, &iter,
              QIF_TRANS_COL_INDEX, rownum++,
@@ -3402,9 +3404,9 @@ gnc_ui_qif_import_finish_cb (GtkAssistant *assistant,
 
     /* Save the user's mapping preferences. */
     scm_result = scm_apply (save_map_prefs,
-                            SCM_LIST5 (wind->acct_map_info, wind->cat_map_info,
-                                      wind->memo_map_info, wind->security_hash,
-                                      wind->security_prefs),
+                            scm_list_5 (wind->acct_map_info, wind->cat_map_info,
+                                        wind->memo_map_info, wind->security_hash,
+                                        wind->security_prefs),
                             SCM_EOL);
 
     if (scm_result == SCM_BOOL_F)
@@ -3509,12 +3511,12 @@ void gnc_ui_qif_import_prepare_cb (GtkAssistant  *assistant, GtkWidget *page,
     }
     else if (!g_strcmp0 (pagename, "category_doc_page"))
     {
-        /* Current page is Catagory Doc. page */
+        /* Current page is Category Doc. page */
         gnc_ui_qif_import_catagory_doc_prepare (assistant, user_data);
     }
     else if (!g_strcmp0 (pagename, "category_match_page"))
     {
-        /* Current page is Catagory Match page */
+        /* Current page is Category Match page */
         gnc_ui_qif_import_catagory_match_prepare (assistant, user_data);
     }
     else if (!g_strcmp0 (pagename, "memo_doc_page"))
@@ -3615,8 +3617,9 @@ get_assistant_widgets (QIFImportWindow *wind, GtkBuilder *builder)
                                    GTK_TEXT_VIEW(wind->convert_log));
     wind->summary_text       = GTK_WIDGET(gtk_builder_get_object (builder, "summary_page"));
 
-    // Set the style context for this assistant so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(wind->window), "GncAssistQifImport");
+    // Set the name for this assistant so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(wind->window), "gnc-id-assistant-qif-import");
+    gnc_widget_style_context_add_class (GTK_WIDGET(wind->window), "gnc-class-imports");
 
     wind->new_transaction_view =
         GTK_WIDGET(gtk_builder_get_object (builder, "new_transaction_view"));
@@ -3876,6 +3879,13 @@ gnc_file_qif_import (void)
 {
     QIFImportWindow *qif_win;
     gint component_id;
+    SCM  has_regex = scm_c_eval_string ("(defined? 'make-regexp)");
+
+    if (scm_is_false(has_regex) == 1)
+    {
+        gnc_warning_dialog(NULL, _("QIF import requires guile with regex support."));
+        return;
+    }
 
     qif_win = g_new0 (QIFImportWindow, 1);
 

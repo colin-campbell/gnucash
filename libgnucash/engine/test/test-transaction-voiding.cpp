@@ -1,7 +1,6 @@
 /***************************************************************************
  *            test-transaction-voiding.c
  *
- *  Modified to run without Guile: Mon Aug 22 11:24:44 2005
  *  Copyright  2005  Neil Williams
  *  linux@codehelp.co.uk
  ****************************************************************************/
@@ -21,10 +20,11 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  *  02110-1301, USA.
  */
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
-#include <glib.h>
 #include <string.h>
 #include "cashobjects.h"
 #include "Account.h"

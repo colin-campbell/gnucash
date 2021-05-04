@@ -25,6 +25,7 @@
 #include <config.h>
 #endif
 
+#include <stdint.h>
 #include <gtk/gtk.h>
 #include <glib/gi18n.h>
 
@@ -57,7 +58,7 @@ struct _GNCSearchReconciledPrivate
 G_DEFINE_TYPE_WITH_PRIVATE(GNCSearchReconciled, gnc_search_reconciled, GNC_TYPE_SEARCH_CORE_TYPE)
 
 #define _PRIVATE(o) \
-   (G_TYPE_INSTANCE_GET_PRIVATE ((o), GNC_TYPE_SEARCH_RECONCILED, GNCSearchReconciledPrivate))
+   ((GNCSearchReconciledPrivate*)g_type_instance_get_private((GTypeInstance*)o, GNC_TYPE_SEARCH_RECONCILED))
 
 static GNCSearchCoreTypeClass *parent_class;
 
@@ -158,8 +159,13 @@ static void
 toggle_changed (GtkToggleButton *button, GNCSearchReconciled *fe)
 {
     gboolean is_on = gtk_toggle_button_get_active (button);
+#ifdef __LP64__
     cleared_match_t value =
-        (cleared_match_t) g_object_get_data (G_OBJECT (button), "button-value");
+        (cleared_match_t) ((uint64_t)g_object_get_data (G_OBJECT (button), "button-value") & 0xffffffff); // Binary mask to silence void-pointer-to-enum-cast warning.
+#else
+    cleared_match_t value =
+	(cleared_match_t)g_object_get_data (G_OBJECT (button), "button-value");
+#endif
 
     if (is_on)
         fe->value |= value;

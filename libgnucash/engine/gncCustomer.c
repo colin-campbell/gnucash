@@ -37,9 +37,7 @@
 #include "gncAddressP.h"
 #include "gncBillTermP.h"
 #include "gncInvoice.h"
-#ifdef GNUCASH_MAJOR_VERSION
 #include "gncBusiness.h"
-#endif
 
 #include "gncCustomer.h"
 #include "gncCustomerP.h"
@@ -86,7 +84,7 @@ static QofLogModule log_module = GNC_MOD_BUSINESS;
 /* ============================================================== */
 /* misc inline funcs */
 
-G_INLINE_FUNC void mark_customer (GncCustomer *customer);
+static inline void mark_customer (GncCustomer *customer);
 void mark_customer (GncCustomer *customer)
 {
     qof_instance_set_dirty(&customer->inst);
@@ -707,9 +705,9 @@ GList * gncCustomerGetJoblist (const GncCustomer *cust, gboolean show_all)
         {
             GncJob *j = iterator->data;
             if (gncJobGetActive (j))
-                list = g_list_append (list, j);
+                list = g_list_prepend (list, j);
         }
-        return list;
+        return g_list_reverse (list);
     }
 }
 

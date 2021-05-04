@@ -21,11 +21,11 @@
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  *                                                                  *
  *******************************************************************/
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
-
-#include <glib.h>
 #include <string.h>
 #include "AccountP.h"
 #include "Transaction.h"
@@ -33,6 +33,7 @@ extern "C"
 #include "gnc-lot.h"
 #include "gnc-lot-p.h"
 }
+
 #include "gnc-xml-helper.h"
 
 #include "sixtp.h"
@@ -237,7 +238,7 @@ spl_id_handler (xmlNodePtr node, gpointer data)
 
     xaccSplitSetGUID (pdata->split, tmp);
 
-    g_free (tmp);
+    guid_free (tmp);
     return TRUE;
 }
 
@@ -316,7 +317,7 @@ spl_account_handler (xmlNodePtr node, gpointer data)
 
     xaccAccountInsertSplit (account, pdata->split);
 
-    g_free (id);
+    guid_free (id);
 
     return TRUE;
 }
@@ -340,7 +341,7 @@ spl_lot_handler (xmlNodePtr node, gpointer data)
 
     gnc_lot_add_split (lot, pdata->split);
 
-    g_free (id);
+    guid_free (id);
 
     return TRUE;
 }
@@ -455,7 +456,7 @@ trn_id_handler (xmlNodePtr node, gpointer trans_pdata)
 
     xaccTransSetGUID ((Transaction*)trn, tmp);
 
-    g_free (tmp);
+    guid_free (tmp);
 
     return TRUE;
 }

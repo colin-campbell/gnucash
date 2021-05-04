@@ -232,7 +232,8 @@ gnc_order_window_cancel_cb (GtkWidget *widget, gpointer data)
 void
 gnc_order_window_help_cb (GtkWidget *widget, gpointer data)
 {
-    gnc_gnome_help(HF_HELP, HL_USAGE_BILL);
+    OrderWindow *ow = data;
+    gnc_gnome_help (GTK_WINDOW(ow->dialog), HF_HELP, HL_USAGE_BILL);
 }
 
 void
@@ -590,8 +591,9 @@ gnc_order_new_window (GtkWindow *parent, QofBook *bookp, OrderDialogType type,
     ow->dialog = GTK_WIDGET(gtk_builder_get_object (builder, "order_entry_dialog"));
     gtk_window_set_transient_for (GTK_WINDOW(ow->dialog), parent);
 
-    // Set the style context for this dialog so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(ow->dialog), "GncOrderDialog");
+    // Set the name for this dialog so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(ow->dialog), "gnc-id-order");
+    gnc_widget_style_context_add_class (GTK_WIDGET(ow->dialog), "gnc-class-orders");
 
     /* Grab the widgets */
     ow->id_entry = GTK_WIDGET(gtk_builder_get_object (builder, "id_entry"));
@@ -704,8 +706,9 @@ gnc_order_window_new_order (GtkWindow *parent, QofBook *bookp, GncOwner *owner)
     ow->dialog = GTK_WIDGET(gtk_builder_get_object (builder, "new_order_dialog"));
     gtk_window_set_transient_for (GTK_WINDOW(ow->dialog), parent);
 
-    // Set the style context for this dialog so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(ow->dialog), "GncOrderDialog");
+    // Set the name for this dialog so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(ow->dialog), "gnc-id-new-order");
+    gnc_widget_style_context_add_class (GTK_WIDGET(ow->dialog), "gnc-class-orders");
 
     g_object_set_data (G_OBJECT (ow->dialog), "dialog_info", ow);
 
@@ -872,7 +875,7 @@ gnc_order_search (GtkWindow *parent, GncOrder *start, GncOwner *owner, QofBook *
                                            ORDER_IS_CLOSED, NULL);
         params = gnc_search_param_prepend (params, _("Date Opened"), NULL, type,
                                            ORDER_OPENED, NULL);
-        params = gnc_search_param_prepend (params, _("Owner Name "), NULL, type,
+        params = gnc_search_param_prepend (params, _("Owner Name"), NULL, type,
                                            ORDER_OWNER, OWNER_NAME, NULL);
         params = gnc_search_param_prepend (params, _("Order ID"), NULL, type,
                                            ORDER_ID, NULL);
@@ -948,7 +951,7 @@ gnc_order_search (GtkWindow *parent, GncOrder *start, GncOwner *owner, QofBook *
                                      params, columns, q, q2,
                                      buttons, NULL, new_order_cb,
                                      sw, free_order_cb, GNC_PREFS_GROUP_SEARCH,
-                                     NULL, "GncFindOrderDialog");
+                                     NULL, "gnc-class-orders");
 }
 
 GNCSearchWindow *

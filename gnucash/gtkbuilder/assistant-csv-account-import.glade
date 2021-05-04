@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.22.1 -->
+<!-- Generated with glade 3.36.0 -->
 <interface>
-  <requires lib="gtk+" version="3.10"/>
+  <requires lib="gtk+" version="3.22"/>
   <object class="GtkAdjustment" id="num_hrows_adj">
     <property name="upper">100</property>
     <property name="step_increment">1</property>
@@ -17,6 +17,15 @@
     <signal name="cancel" handler="csv_import_assistant_cancel" swapped="no"/>
     <signal name="close" handler="csv_import_assistant_close" swapped="no"/>
     <signal name="prepare" handler="csv_import_assistant_prepare" swapped="no"/>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
     <child>
       <placeholder/>
     </child>
@@ -30,7 +39,7 @@
           <object class="GtkLabel" id="start_label">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes" comments="Run the assistent in your language to see GTK's translation of the button labels.">
+            <property name="label" translatable="yes" comments="Run the assistant in your language to see GTK's translation of the button labels.">
 This assistant will help you import Accounts from a file.
 
 The file must be in the same format as that exported as this is a fixed format import which can be seen by looking at a file created by using the "Export Account Tree to CSV" export menu option.
@@ -97,7 +106,8 @@ Enter file name and location for the Import...
               <object class="GtkLabel" id="label3">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="margin_right">5</property>
+                <property name="margin_start">6</property>
+                <property name="margin_end">6</property>
                 <property name="label" translatable="yes">Number of rows for the Header</property>
               </object>
               <packing>
@@ -139,7 +149,8 @@ Enter file name and location for the Import...
               <object class="GtkGrid" id="table4">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="border_width">12</property>
+                <property name="border_width">6</property>
+                <property name="column_spacing">6</property>
                 <child>
                   <object class="GtkRadioButton" id="radio_comma">
                     <property name="label" translatable="yes">Comma Separated</property>
@@ -185,7 +196,7 @@ Enter file name and location for the Import...
                   </object>
                   <packing>
                     <property name="left_attach">0</property>
-                    <property name="top_attach">2</property>
+                    <property name="top_attach">1</property>
                   </packing>
                 </child>
                 <child>
@@ -203,15 +214,6 @@ Enter file name and location for the Import...
                     <property name="left_attach">2</property>
                     <property name="top_attach">0</property>
                   </packing>
-                </child>
-                <child>
-                  <placeholder/>
-                </child>
-                <child>
-                  <placeholder/>
-                </child>
-                <child>
-                  <placeholder/>
                 </child>
                 <child>
                   <placeholder/>
@@ -324,6 +326,8 @@ Cancel to abort.</property>
               <object class="GtkTextView" id="summary_error_view">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
+                <property name="margin_start">3</property>
+                <property name="margin_end">3</property>
                 <property name="left_margin">2</property>
                 <property name="right_margin">2</property>
                 <property name="accepts_tab">False</property>
@@ -346,6 +350,20 @@ Cancel to abort.</property>
     </child>
     <child>
       <placeholder/>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child internal-child="action_area">
+      <object class="GtkBox">
+        <property name="can_focus">False</property>
+      </object>
     </child>
   </object>
 </interface>

@@ -106,7 +106,7 @@ typedef struct GncPluginFileHistoryPrivate
 
 
 #define GNC_PLUGIN_FILE_HISTORY_GET_PRIVATE(o)  \
-   (G_TYPE_INSTANCE_GET_PRIVATE ((o), GNC_TYPE_PLUGIN_FILE_HISTORY, GncPluginFileHistoryPrivate))
+   ((GncPluginFileHistoryPrivate*)g_type_instance_get_private((GTypeInstance*)o, GNC_TYPE_PLUGIN_FILE_HISTORY))
 
 /************************************************************
  *                     Other Functions                      *
@@ -256,6 +256,7 @@ gnc_history_remove_file (const char *oldfile)
                 }
                 j++;
             }
+            g_free (filename);
         }
         g_free(from);
     }
@@ -283,12 +284,18 @@ gboolean gnc_history_test_for_file (const char *oldfile)
         filename = gnc_prefs_get_string(GNC_PREFS_GROUP_HISTORY, from);
         g_free(from);
 
-        if (filename && (g_utf8_collate(oldfile, filename) == 0))
+        if (!filename)
+            continue;
+
+        if (g_utf8_collate(oldfile, filename) == 0)
         {
             found = TRUE;
+            g_free (filename);
             break;
         }
+        g_free (filename);
     }
+
     return found;
 }
 
@@ -488,7 +495,7 @@ gnc_plugin_history_list_changed (gpointer prefs,
                                  gpointer user_data)
 {
     GncMainWindow *window;
-    const gchar *filename;
+    gchar *filename;
     gint index;
 
     ENTER("");
@@ -509,6 +516,7 @@ gnc_plugin_history_list_changed (gpointer prefs,
 
     filename = gnc_prefs_get_string (GNC_PREFS_GROUP_HISTORY, pref);
     gnc_history_update_action (window, index, filename);
+    g_free (filename);
 
     gnc_main_window_actions_updated (window);
     LEAVE("");

@@ -56,7 +56,9 @@ typedef struct GncMainWindow
 {
     GtkWindow gtk_window;	/**< The parent object for a main window. */
     GtkUIManager *ui_merge; /**< A pointer to the UI Manager data
-				   structure for the whole window. */
+                                 structure for the whole window. */
+    gboolean window_quitting; /**< Set to TRUE when quitting from this window. */
+    gboolean just_plugin_prefs; /**< Just remove preferences only from plugins */
 } GncMainWindow;
 
 /** The class data structure for a main window object. */
@@ -183,6 +185,15 @@ void
 main_window_update_page_color (GncPluginPage *page,
                                const gchar *color_in);
 
+/** Update the icon on the page tabs in the main window.
+ *
+ *  @param page The page to be updated.
+ *  @param read_only If set a padlock icon will be displayed
+ *  for the page tab icon if it had one.
+*/
+void
+main_window_update_page_set_read_only_icon (GncPluginPage *page,
+                                            gboolean read_only);
 
 /** Manually add a set of actions to the specified window.  Plugins
  *  whose user interface is not hard coded (e.g. the menu-additions *
@@ -346,6 +357,16 @@ gboolean gnc_main_window_popup_menu_cb (GtkWidget *widget,
  */
 void gnc_main_window_restore_all_windows(const GKeyFile *keyfile);
 
+/** Check if the main window is restoring the plugin pages. This is
+ *  used on report pages to delay the creation of the report till the
+ *  page is focused.
+ *
+ *  @param window When window whose pages should be checked.
+ *
+ *  @return TRUE if pages are being restored
+ */
+gboolean gnc_main_window_is_restoring_pages (GncMainWindow *window);
+
 /** Save the persistent state of all windows.
  *
  *  @param keyfile The GKeyFile to contain persistent window state.
@@ -362,7 +383,7 @@ void gnc_main_window_restore_default_state(GncMainWindow *window);
  *  If any page returns a failure indication, then the function stops
  *  walking pages and immediately returns a failure.
  *
- *  @param window Whe window whose pages should be checked.
+ *  @param window When window whose pages should be checked.
  *
  *  @return FALSE if any page could not or would not comply, which
  *  should cancel the pending operation.  TRUE otherwise */
@@ -391,7 +412,7 @@ void gnc_main_window_all_action_set_sensitive (const gchar *action_name, gboolea
 
 /** Find action in main window.
  *
- *  @param window Whe window which should be checked for the action.
+ *  @param window When window which should be checked for the action.
  *
  *  @param name The name of the command to be retrieved.
  *
@@ -424,7 +445,7 @@ GtkWidget *gnc_book_options_dialog_cb (gboolean modal, gchar *title,
 
 /**
  * Processes selected options in the Book Options dialog: checks book_currency
- * and use_split_action_for_num to see if features kvp shuold be set. To be used
+ * and use_split_action_for_num to see if features kvp should be set. To be used
  * where ever a new book situation requires book option selection (e.g., not
  * just in Book Options dialog opened from main window but also in new-file
  * assistant).

@@ -24,10 +24,10 @@
 # Creates a new book file (or *overwrites* an existing one) that has elements
 # in it for business use -- intended as a demonstration program.
 # Syntax:
-# gnucash-env python simple_business_create.py \
+# python3 simple_business_create.py \
 #                       sqlite3:///home/blah/blah.gnucash
 #
-# Specificically, this sets up a simple tree, creates a customer, job,
+# Specifically, this sets up a simple tree, creates a customer, job,
 # employee and vendor, creates an unposted invoice for each,
 # and posts the customer invoice with a few entries and a tax table.
 #
@@ -53,7 +53,7 @@ from os.path import abspath
 from sys import argv, exit
 import datetime
 from datetime import timedelta
-from gnucash import Session, Account, GncNumeric
+from gnucash import Session, Account, GncNumeric, SessionOpenMode
 from gnucash.gnucash_business import Customer, Employee, Vendor, Job, \
     Address, Invoice, Entry, TaxTable, TaxTableEntry, GNC_AMT_TYPE_PERCENT, \
     GNC_DISC_PRETAX    
@@ -65,12 +65,12 @@ if len(argv) < 2:
     print('not enough parameters')
     print('usage: simple_business_create.py {new_book_url}')
     print('example:')
-    print("gnucash-env python simple_business_create.py sqlite3:///home/blah/blah.gnucash")
+    print("python3 simple_business_create.py sqlite3:///home/blah/blah.gnucash")
     exit()
     
 
 try:
-    s = Session(argv[1], is_new=True)
+    s = Session(argv[1], SessionOpenMode.SESSION_NEW_STORE)
 
     book = s.book
     root = book.get_root_account()

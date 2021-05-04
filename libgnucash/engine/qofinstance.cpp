@@ -112,7 +112,7 @@ typedef struct QofInstancePrivate
 }  QofInstancePrivate;
 
 #define GET_PRIVATE(o)  \
-   (G_TYPE_INSTANCE_GET_PRIVATE ((o), QOF_TYPE_INSTANCE,  QofInstancePrivate))
+    ((QofInstancePrivate*)g_type_instance_get_private((GTypeInstance*)o, QOF_TYPE_INSTANCE))
 
 G_DEFINE_TYPE_WITH_PRIVATE(QofInstance, qof_instance, G_TYPE_OBJECT);
 QOF_GOBJECT_FINALIZE(qof_instance);
@@ -1030,10 +1030,9 @@ qof_commit_edit_part2(QofInstance *inst,
                 on_error(inst, errcode);
             return FALSE;
         }
-        /* XXX the backend commit code should clear dirty!! */
-        priv->dirty = FALSE;
+        if (!priv->dirty) //Cleared if the save was successful
+            priv->infant = FALSE;
     }
-    priv->infant = FALSE;
 
     if (priv->do_free)
     {

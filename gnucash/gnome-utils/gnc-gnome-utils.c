@@ -29,7 +29,6 @@
 #include "gnc-prefs-utils.h"
 #include "gnc-prefs.h"
 #include "gnc-gnome-utils.h"
-//#include "gnc-html.h"
 #include "gnc-engine.h"
 #include "gnc-path.h"
 #include "gnc-ui.h"
@@ -41,6 +40,7 @@
 #include "gnc-splash.h"
 #include "gnc-window.h"
 #include "gnc-icons.h"
+#include "dialog-doclink-utils.h"
 #include "dialog-options.h"
 #include "dialog-commodity.h"
 #include "dialog-totd.h"
@@ -56,6 +56,8 @@
 #import <Cocoa/Cocoa.h>
 #endif
 
+extern SCM scm_init_sw_gnome_utils_module(void);
+
 static QofLogModule log_module = GNC_MOD_GUI;
 static int gnome_is_running = FALSE;
 static int gnome_is_terminating = FALSE;
@@ -64,18 +66,37 @@ static int gnome_is_initialized = FALSE;
 
 #define ACCEL_MAP_NAME "accelerator-map"
 
+const gchar *msg_no_help_found =
+    N_("GnuCash could not find the files of the help documentation.");
+const gchar *msg_no_help_reason =
+    N_("This is likely because the \"gnucash-docs\" package is not properly installed.");
+    /* Translators: URI of missing help files */
+const gchar *msg_no_help_location = N_("Expected location");
+
 static void gnc_book_options_help_cb (GNCOptionWin *win, gpointer dat);
+
+void
+gnc_gnome_utils_init (void)
+{
+    gnc_component_manager_init ();
+    gnc_options_ui_initialize ();
+
+    scm_init_sw_gnome_utils_module();
+    scm_c_use_module ("sw_gnome_utils");
+    scm_c_use_module("gnucash gnome-utils");
+}
+
 
 static void
 gnc_global_options_help_cb (GNCOptionWin *win, gpointer dat)
 {
-    gnc_gnome_help (HF_HELP, HL_GLOBPREFS);
+    gnc_gnome_help (GTK_WINDOW(gnc_options_dialog_widget (win)), HF_HELP, HL_GLOBPREFS);
 }
 
 static void
 gnc_book_options_help_cb (GNCOptionWin *win, gpointer dat)
 {
-    gnc_gnome_help (HF_HELP, HL_BOOK_OPTIONS);
+    gnc_gnome_help (GTK_WINDOW(gnc_options_dialog_widget (win)), HF_HELP, HL_BOOK_OPTIONS);
 }
 
 void
@@ -110,9 +131,17 @@ gnc_options_dialog_set_new_book_option_values (GNCOptionDB *odb)
 }
 
 static void
-gnc_commodity_help_cb (void)
+gnc_style_sheet_options_help_cb (GNCOptionWin *win, gpointer dat)
 {
-    gnc_gnome_help (HF_HELP, HL_COMMODITY);
+    gnc_gnome_help (GTK_WINDOW(gnc_options_dialog_widget (win)), HF_HELP, HL_STYLE_SHEET);
+}
+
+void
+gnc_options_dialog_set_style_sheet_options_help_cb (GNCOptionWin *win)
+{
+    gnc_options_dialog_set_help_cb (win,
+                                   (GNCOptionWinCallback)gnc_style_sheet_options_help_cb,
+                                    NULL);
 }
 
 /* gnc_configure_date_format
@@ -166,33 +195,6 @@ gnc_configure_date_completion (void)
     qof_date_completion_set(dc, backmonths);
 }
 
-/* This function was copied from GTK3.22 as it was only introduced in
- * version 3.16 */
-#if !GTK_CHECK_VERSION(3,16,0)
-static void
-gtk_css_provider_load_from_resource (GtkCssProvider *css_provider,
-                                     const gchar *resource_path)
-{
-  GFile *file;
-  gchar *uri, *escaped;
-
-  g_return_if_fail (GTK_IS_CSS_PROVIDER (css_provider));
-  g_return_if_fail (resource_path != NULL);
-
-  escaped = g_uri_escape_string (resource_path,
-                  G_URI_RESERVED_CHARS_ALLOWED_IN_PATH, FALSE);
-  uri = g_strconcat ("resource://", escaped, NULL);
-  g_free (escaped);
-
-  file = g_file_new_for_uri (uri);
-  g_free (uri);
-
-  gtk_css_provider_load_from_file (css_provider, file, NULL);
-
-  g_object_unref (file);
-}
-#endif
-
 void
 gnc_add_css_file (void)
 {
@@ -212,12 +214,8 @@ gnc_add_css_file (void)
     gtk_style_context_add_provider_for_screen (screen, GTK_STYLE_PROVIDER (provider_app), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     gtk_style_context_add_provider_for_screen (screen, GTK_STYLE_PROVIDER (provider_user), GTK_STYLE_PROVIDER_PRIORITY_USER);
 
-#if GTK_CHECK_VERSION(3,20,0)
-    gtk_css_provider_load_from_resource (provider_app, "/org/gnucash/gnucash-320.css");
-#else
-    gtk_css_provider_load_from_resource (provider_app, "/org/gnucash/gnucash-310.css");
-#endif
-    gtk_css_provider_load_from_resource (provider_fallback,  "/org/gnucash/gnucash-fallback-310.css");
+    gtk_css_provider_load_from_resource (provider_app, "/org/gnucash/gnucash.css");
+    gtk_css_provider_load_from_resource (provider_fallback,  "/org/gnucash/gnucash-fallback.css");
 
     var = gnc_userconfig_dir ();
     if (var)
@@ -232,6 +230,61 @@ gnc_add_css_file (void)
     g_object_unref (provider_fallback);
 }
 
+/* This function fixes an issue with yelp that it does not work with the
+ * ?anchor varient, see https://gitlab.gnome.org/GNOME/yelp/issues/116
+ */
+static gchar *
+gnc_gnome_help_yelp_anchor_fix (GtkWindow *parent, const char *file_name, const char *anchor)
+{
+    const gchar * const *sdatadirs = g_get_system_data_dirs ();
+    const gchar * const *langs = g_get_language_names ();
+    gchar *lookfor = g_strconcat ("gnome/help/", file_name, NULL);
+    gchar *help_path = NULL;
+    gchar *help_file = NULL;
+    gchar *full_path = NULL;
+    gchar *uri = NULL;
+
+    for (; *sdatadirs; sdatadirs++)
+    {
+        gchar *filepath = g_build_filename (*sdatadirs, lookfor, NULL);
+        if (g_file_test (filepath, G_FILE_TEST_EXISTS))
+            help_path = g_strdup (filepath);
+        g_free (filepath);
+    }
+    g_free (lookfor);
+
+    if (!help_path)
+    {
+        gnc_error_dialog (parent, "%s\n%s", _(msg_no_help_found), _(msg_no_help_reason));
+        PERR("Unable to find 'gnome/help' directory");
+        return NULL;
+    }
+
+    // add the file extension, currently .xml
+    help_file = g_strconcat (file_name, ".xml", NULL);
+
+    for (; *langs; langs++)
+    {
+        gchar *filename = g_build_filename (help_path, *langs, help_file, NULL);
+        if (g_file_test (filename, G_FILE_TEST_EXISTS))
+            full_path = g_strdup (filename);
+        g_free (filename);
+    }
+    g_free (help_path);
+    g_free (help_file);
+
+    if (full_path)
+        uri = g_strconcat ("ghelp:", full_path, "?", anchor, NULL);
+    else
+    {
+        gnc_error_dialog (parent, "%s\n%s", _(msg_no_help_found), _(msg_no_help_reason));
+        PERR("Unable to find valid help language directory");
+        return NULL;
+    }
+    g_free (full_path);
+    return uri;
+}
+
 #ifdef MAC_INTEGRATION
 
 /* Don't be alarmed if this function looks strange to you: It's
@@ -239,7 +292,7 @@ gnc_add_css_file (void)
  * toolkit.
  */
 void
-gnc_gnome_help (const char *dir, const char *detail)
+gnc_gnome_help (GtkWindow *parent, const char *dir, const char *detail)
 {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
     NSString *subdir = [NSString stringWithUTF8String: dir];
@@ -280,10 +333,9 @@ gnc_gnome_help (const char *dir, const char *detail)
                   componentsJoinedByString: @"-"];
         if (![[NSFileManager defaultManager] fileExistsAtPath: docs_dir])
         {
-            const gchar *message =
-                _("GnuCash could not find the files for the help documentation. "
-                  "This is likely because the 'gnucash-docs' package is not installed");
-            gnc_error_dialog(NULL, "%s at %s", message, [docs_dir UTF8String]);
+            gnc_error_dialog (parent, "%s\n%s\n%s: %s", _(msg_no_help_found),
+                              _(msg_no_help_reason),
+                              _(msg_no_help_location), [docs_dir UTF8String]);
             [pool release];
             return;
         }
@@ -373,16 +425,13 @@ gnc_gnome_help (const char *dir, const char *detail)
         [[NSWorkspace sharedWorkspace] openURL: url];
     else
     {
-        const gchar *message =
-            _("GnuCash could not find the files for the help documentation. "
-              "This is likely because the 'gnucash-docs' package is not installed.");
-        gnc_error_dialog(NULL, "%s", message);
+       gnc_error_dialog (parent, "%s\n%s", _(msg_no_help_found), _(msg_no_help_reason));
     }
     [pool release];
 }
 #elif defined G_OS_WIN32 /* G_OS_WIN32 */
 void
-gnc_gnome_help (const char *file_name, const char *anchor)
+gnc_gnome_help (GtkWindow *parent, const char *file_name, const char *anchor)
 {
     const gchar * const *lang;
     gchar *pkgdatadir, *fullpath, *found = NULL;
@@ -404,9 +453,7 @@ gnc_gnome_help (const char *file_name, const char *anchor)
 
     if (!found)
     {
-        const gchar *message =
-            _("GnuCash could not find the files for the help documentation.");
-        gnc_error_dialog (NULL, message);
+        gnc_error_dialog (parent, "%s\n%s", _(msg_no_help_found), _(msg_no_help_reason));
     }
     else
     {
@@ -416,33 +463,29 @@ gnc_gnome_help (const char *file_name, const char *anchor)
 }
 #else
 void
-gnc_gnome_help (const char *file_name, const char *anchor)
+gnc_gnome_help (GtkWindow *parent, const char *file_name, const char *anchor)
 {
     GError *error = NULL;
     gchar *uri = NULL;
-    gboolean success;
+    gboolean success = TRUE;
 
     if (anchor)
-        uri = g_strconcat ("ghelp:", file_name, "?", anchor, NULL);
+        uri = gnc_gnome_help_yelp_anchor_fix (parent, file_name, anchor);
     else
         uri = g_strconcat ("ghelp:", file_name, NULL);
 
     DEBUG ("Attempting to opening help uri %s", uri);
-#if GTK_CHECK_VERSION(3,22,0)
-    success = gtk_show_uri_on_window (NULL, uri, gtk_get_current_event_time (), &error);
-#else
-    success = gtk_show_uri (NULL, uri, gtk_get_current_event_time (), &error);
-#endif
+
+    if (uri)
+        success = gtk_show_uri_on_window (NULL, uri, gtk_get_current_event_time (), &error);
+
     g_free (uri);
     if (success)
         return;
 
     g_assert(error != NULL);
     {
-        const gchar *message =
-            _("GnuCash could not find the files for the help documentation. "
-              "This is likely because the 'gnucash-docs' package is not installed.");
-        gnc_error_dialog(NULL, "%s", message);
+        gnc_error_dialog (parent, "%s\n%s", _(msg_no_help_found), _(msg_no_help_reason));
     }
     PERR ("%s", error->message);
     g_error_free(error);
@@ -458,13 +501,13 @@ gnc_gnome_help (const char *file_name, const char *anchor)
  * toolkit.
  */
 void
-gnc_launch_assoc (GtkWindow *parent, const char *uri)
+gnc_launch_doclink (GtkWindow *parent, const char *uri)
 {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
     NSString *uri_str = [NSString stringWithUTF8String: uri];
     NSURL *url = [[[NSURL alloc] initWithString: uri_str] autorelease];
     const gchar *message =
-        _("GnuCash could not find the associated file.");
+        _("GnuCash could not find the linked document.");
 
     if (url)
     {
@@ -473,14 +516,14 @@ gnc_launch_assoc (GtkWindow *parent, const char *uri)
         return;
     }
 
-    gnc_error_dialog(parent, "%s", message);
+    gnc_error_dialog (parent, "%s", message);
 
     [pool release];
     return;
 }
 #elif defined G_OS_WIN32 /* G_OS_WIN32 */
 void
-gnc_launch_assoc (GtkWindow *parent, const char *uri)
+gnc_launch_doclink (GtkWindow *parent, const char *uri)
 {
     wchar_t *winuri = NULL;
     gchar *filename = NULL;
@@ -488,11 +531,10 @@ gnc_launch_assoc (GtkWindow *parent, const char *uri)
      * file URI so we have to do it. */
     if (gnc_uri_is_file_uri (uri))
     {
-        gchar *uri_ue = g_uri_unescape_string (uri, NULL);
-        filename = gnc_uri_get_path (uri_ue);
-        filename = g_strdelimit (filename, "/", '\\'); // needed for unc paths
+        gchar *uri_scheme = gnc_uri_get_scheme (uri);
+        filename = gnc_doclink_get_unescape_uri (NULL, uri, uri_scheme);
         winuri = (wchar_t *)g_utf8_to_utf16(filename, -1, NULL, NULL, NULL);
-        g_free (uri_ue);
+        g_free (uri_scheme);
     }
     else
         winuri = (wchar_t *)g_utf8_to_utf16(uri, -1, NULL, NULL, NULL);
@@ -505,8 +547,8 @@ gnc_launch_assoc (GtkWindow *parent, const char *uri)
                        NULL, NULL, SW_SHOWNORMAL) <= 32)
         {
             const gchar *message =
-            _("GnuCash could not find the associated file");
-            gnc_error_dialog(parent, "%s:\n%s", message, filename);
+            _("GnuCash could not find the linked document.");
+            gnc_error_dialog (parent, "%s:\n%s", message, filename);
         }
         g_free (wincmd);
         g_free (winuri);
@@ -516,7 +558,7 @@ gnc_launch_assoc (GtkWindow *parent, const char *uri)
 
 #else
 void
-gnc_launch_assoc (GtkWindow *parent, const char *uri)
+gnc_launch_doclink (GtkWindow *parent, const char *uri)
 {
     GError *error = NULL;
     gboolean success;
@@ -525,36 +567,32 @@ gnc_launch_assoc (GtkWindow *parent, const char *uri)
         return;
 
     DEBUG ("Attempting to open uri %s", uri);
-#if GTK_CHECK_VERSION(3,22,0)
+
     success = gtk_show_uri_on_window (NULL, uri, gtk_get_current_event_time (), &error);
-#else
-    success = gtk_show_uri (NULL, uri, gtk_get_current_event_time (), &error);
-#endif
+
     if (success)
         return;
 
-    g_assert(error != NULL);
+    g_assert (error != NULL);
     {
         gchar *error_uri = NULL;
         const gchar *message =
-            _("GnuCash could not open the associated URI:");
+            _("GnuCash could not open the linked document:");
 
         if (gnc_uri_is_file_uri (uri))
         {
-            gchar *uri_ue = g_uri_unescape_string (uri, NULL);
-            gchar *filename = gnc_uri_get_path (uri_ue);
-            error_uri = g_strdup (filename);
-            g_free (uri_ue);
-            g_free (filename);
+            gchar *uri_scheme = gnc_uri_get_scheme (uri);
+            error_uri = gnc_doclink_get_unescape_uri (NULL, uri, uri_scheme);
+            g_free (uri_scheme);
         }
         else
             error_uri = g_strdup (uri);
 
-        gnc_error_dialog(parent, "%s\n%s", message, error_uri);
+        gnc_error_dialog (parent, "%s\n%s", message, error_uri);
         g_free (error_uri);
     }
     PERR ("%s", error->message);
-    g_error_free(error);
+    g_error_free (error);
 }
 
 #endif
@@ -729,7 +767,6 @@ gnc_gui_init(void)
                                 gnc_gui_refresh_all,
                                 NULL);
 
-    gnc_ui_commodity_set_help_callback (gnc_commodity_help_cb);
     gnc_file_set_shutdown_callback (gnc_shutdown);
 
     gnc_options_dialog_set_global_help_cb (gnc_global_options_help_cb, NULL);
@@ -775,6 +812,31 @@ gnc_gui_destroy (void)
     if (!gnome_is_initialized)
         return;
 
+    if (gnc_prefs_is_set_up())
+    {
+        gnc_prefs_remove_cb_by_func (GNC_PREFS_GROUP_GENERAL,
+                                     GNC_PREF_DATE_FORMAT,
+                                     gnc_configure_date_format,
+                                     NULL);
+        gnc_prefs_remove_cb_by_func (GNC_PREFS_GROUP_GENERAL,
+                                     GNC_PREF_DATE_COMPL_THISYEAR,
+                                     gnc_configure_date_completion,
+                                     NULL);
+        gnc_prefs_remove_cb_by_func (GNC_PREFS_GROUP_GENERAL,
+                                     GNC_PREF_DATE_COMPL_SLIDING,
+                                     gnc_configure_date_completion,
+                                     NULL);
+        gnc_prefs_remove_cb_by_func (GNC_PREFS_GROUP_GENERAL,
+                                     GNC_PREF_DATE_BACKMONTHS,
+                                     gnc_configure_date_completion,
+                                     NULL);
+        gnc_prefs_remove_group_cb_by_func (GNC_PREFS_GROUP_GENERAL,
+                                           gnc_gui_refresh_all,
+                                           NULL);
+
+        gnc_ui_util_remove_registered_prefs ();
+        gnc_prefs_remove_registered ();
+    }
     gnc_extensions_shutdown ();
 }
 
@@ -789,6 +851,7 @@ gnc_gui_shutdown (void)
         map = gnc_build_userdata_path(ACCEL_MAP_NAME);
         gtk_accel_map_save(map);
         g_free(map);
+        gnc_component_manager_shutdown ();
         gtk_main_quit();
     }
 }

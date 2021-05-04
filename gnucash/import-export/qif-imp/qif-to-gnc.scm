@@ -25,8 +25,32 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+(define-module (gnucash qif-import qif-to-gnc))
+(eval-when (compile load eval expand)
+  (load-extension "libgnc-gnome" "scm_init_sw_gnome_module"))
+
+(use-modules (sw_gnome))
+(use-modules (gnucash core-utils))
+(use-modules (gnucash engine))
+(use-modules (gnucash utilities))
+(use-modules (gnucash string))
+(use-modules (gnucash app-utils))
+(use-modules (gnucash qif-import qif-dialog-utils))
+(use-modules (gnucash qif-import qif-objects))
+(use-modules (gnucash qif-import qif-utils))
+(use-modules (gnucash qif-import qif-guess-map))
 (use-modules (srfi srfi-13))
-(use-modules (gnucash import-export string))
+(use-modules (ice-9 match))
+
+(export qif-import:qif-to-gnc)
+(export qif-import:qif-to-gnc-undo)
+(export gnc:account-tree-get-transactions)
+
+(define (n- n) (gnc-numeric-neg n))
+(define (nsub a b) (gnc-numeric-sub a b 0 GNC-DENOM-LCD))
+(define (n+ a b) (gnc-numeric-add a b 0 GNC-DENOM-LCD))
+(define (n* a b) (gnc-numeric-mul a b 0 GNC-DENOM-REDUCE))
+(define (n/ a b) (gnc-numeric-div a b 0 GNC-DENOM-REDUCE))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;  qif-import:find-or-make-acct
@@ -186,7 +210,7 @@
                       (xaccAccountSetName new-acct new-name)
                       (xaccAccountSetDescription
                        new-acct
-                       (_ "QIF import: Name conflict with another account."))))
+                       (G_ "QIF import: Name conflict with another account."))))
 
                 ;; Set the account type.
                 (xaccAccountSetType new-acct
@@ -275,7 +299,7 @@
 
       (if progress-dialog
           (gnc-progress-dialog-set-sub progress-dialog
-                                      (_ "Preparing to convert your QIF data")))
+                                      (G_ "Preparing to convert your QIF data")))
 
       ;; Build a list of all accounts to create for the import tree.
       ;; We need to iterate over the account, category, and payee/memo
@@ -326,7 +350,7 @@
       ;; Build a local account tree to hold converted transactions.
       (if progress-dialog
           (gnc-progress-dialog-set-sub progress-dialog
-                                       (_ "Creating accounts")))
+                                       (G_ "Creating accounts")))
 
       ;; Sort the account list on the depth of the account path.  If a
       ;; short part is explicitly mentioned, make sure it gets created
@@ -375,7 +399,7 @@
       ;; duplicates.  marked transactions/splits won't get imported.
       (if progress-dialog
           (gnc-progress-dialog-set-sub progress-dialog
-                                    (_ "Matching transfers between accounts")))
+                                    (G_ "Matching transfers between accounts")))
       (if (> (length markable-xtns) 1)
           (let xloop ((xtn (car markable-xtns))
                       (rest (cdr markable-xtns)))
@@ -393,7 +417,7 @@
        (lambda (qif-file)
          (if progress-dialog
              (gnc-progress-dialog-set-sub progress-dialog
-                                          (string-append (_ "Converting") " "
+                                          (string-append (G_ "Converting") " "
                                                      (qif-file:path qif-file))))
          (for-each
           (lambda (xtn)
@@ -420,7 +444,8 @@
                                                  progress-dialog)
 
                   ;; rebalance and commit everything
-                  (xaccTransCommitEdit gnc-xtn))))
+                  (xaccTransCommitEdit gnc-xtn)
+                  (xaccTransRecordPrice gnc-xtn PRICE-SOURCE-SPLIT-IMPORT))))
           (qif-file:xtns qif-file)))
        sorted-qif-files-list)
 
@@ -464,12 +489,7 @@
         (qif-memo #f)
         (qif-date (qif-xtn:date qif-xtn))
         (qif-from-acct (qif-xtn:from-acct qif-xtn))
-        (qif-cleared (qif-xtn:cleared qif-xtn))
-        (n- (lambda (n) (gnc-numeric-neg n)))
-        (nsub (lambda (a b) (gnc-numeric-sub a b 0 GNC-DENOM-LCD)))
-        (n+ (lambda (a b) (gnc-numeric-add a b 0 GNC-DENOM-LCD)))
-        (n* (lambda (a b) (gnc-numeric-mul a b 0 GNC-DENOM-REDUCE)))
-        (n/ (lambda (a b) (gnc-numeric-div a b 0 GNC-DENOM-REDUCE))))
+        (qif-cleared (qif-xtn:cleared qif-xtn)))
 
     ;; Set properties of the whole transaction.
 
@@ -478,7 +498,7 @@
       ((not qif-date)
         (qif-import:log progress-dialog
                         "qif-import:qif-xtn-to-gnc-xtn"
-                        (_ "Missing transaction date."))
+                        (G_ "Missing transaction date."))
         (throw 'bad-date
                "qif-import:qif-xtn-to-gnc-xtn"
                "Missing transaction date."
@@ -513,12 +533,10 @@
     ;; Look for the transaction status (QIF "C" line). When it exists, apply
     ;; the cleared (c) or reconciled (y) status to the split. Otherwise, apply
     ;; user preference.
-    (if (eq? qif-cleared 'cleared)
-        (xaccSplitSetReconcile gnc-near-split #\c)
-        (if (eq? qif-cleared 'reconciled)
-            (xaccSplitSetReconcile gnc-near-split #\y)
-            ;; Apply user preference by default.
-            (xaccSplitSetReconcile gnc-near-split transaction-status-pref)))
+    (case qif-cleared
+      ((cleared) (xaccSplitSetReconcile gnc-near-split #\c))
+      ((reconciled) (xaccSplitSetReconcile gnc-near-split #\y))
+      (else (xaccSplitSetReconcile gnc-near-split transaction-status-pref)))
 
     (if (not qif-security)
         (begin
@@ -585,21 +603,17 @@
                                         (hash-ref qif-memo-map qif-memo)))
                                (and (string? memo)
                                     (not (string=? memo ""))
-                                    (hash-ref qif-memo-map memo))))
-                     (if (not far-acct-info)
-                                (set! far-acct-info
-                                      (hash-ref qif-memo-map
-                                                (default-unspec-acct))))))
+                                    (hash-ref qif-memo-map memo))))))
 
-                   (set! far-acct-name (qif-map-entry:gnc-name far-acct-info))
+                   (set! far-acct-name (if far-acct-info
+                                           (qif-map-entry:gnc-name far-acct-info)
+                                           (default-unspec-acct)))
                    (set! far-acct (hash-ref gnc-acct-hash far-acct-name))
 
                    ;; set the reconcile status.
-                   (let ((cleared (qif-split:matching-cleared qif-split)))
-                     (if (eq? 'cleared cleared)
-                         (xaccSplitSetReconcile gnc-far-split #\c))
-                     (if (eq? 'reconciled cleared)
-                         (xaccSplitSetReconcile gnc-far-split #\y)))
+                   (case (qif-split:matching-cleared qif-split)
+                     ((cleared) (xaccSplitSetReconcile gnc-far-split #\c))
+                     ((reconciled) (xaccSplitSetReconcile gnc-far-split #\y)))
 
                    ;; finally, plug the split into the account
                    (xaccSplitSetAccount gnc-far-split far-acct)
@@ -762,12 +776,9 @@
                (xaccSplitSetValue gnc-near-split (n- split-amt))
                (xaccSplitSetValue gnc-far-split split-amt))))
 
-          (let ((cleared (qif-split:matching-cleared
-                          (car (qif-xtn:splits qif-xtn)))))
-            (if (eq? 'cleared cleared)
-                (xaccSplitSetReconcile gnc-far-split #\c))
-            (if (eq? 'reconciled cleared)
-                (xaccSplitSetReconcile gnc-far-split #\y)))
+          (case (qif-split:matching-cleared (car (qif-xtn:splits qif-xtn)))
+            ((cleared) (xaccSplitSetReconcile gnc-far-split #\c))
+            ((reconciled) (xaccSplitSetReconcile gnc-far-split #\y)))
 
           (if qif-commission-acct
               (let* ((commission-acct-info
@@ -842,12 +853,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (qif-import:mark-some-splits splits xtn candidate-xtns errorproc)
-  (let* ((n- (lambda (n) (gnc-numeric-neg n)))
-         (nsub (lambda (a b) (gnc-numeric-sub a b 0 GNC-DENOM-LCD)))
-         (n+ (lambda (a b) (gnc-numeric-add a b 0 GNC-DENOM-LCD)))
-         (n* (lambda (a b) (gnc-numeric-mul a b 0 GNC-DENOM-REDUCE)))
-         (n/ (lambda (a b) (gnc-numeric-div a b 0 GNC-DENOM-REDUCE)))
-         (split (car splits))
+  (let* ((split (car splits))
          (near-acct-name #f)
          (far-acct-name #f)
          (date (qif-xtn:date xtn))
@@ -919,8 +925,8 @@
       (if (not (and far-acct-name near-acct-name))
           (if errorproc
               (errorproc "Transaction with no or only one associated account."))
-          (if (and (not (qif-xtn:mark (car xtns))))
-              (string=? (qif-xtn:from-acct (car xtns)) far-acct-name)
+          (if (and (not (qif-xtn:mark (car xtns)))
+                   (string=? (qif-xtn:from-acct (car xtns)) far-acct-name))
               (begin
                 (set! how
                       (qif-import:xtn-has-matches? (car xtns) near-acct-name
@@ -957,19 +963,9 @@
         (this-group-amt (gnc-numeric-zero))
         (how #f)
         (date-matches
-         (let ((self-date (qif-xtn:date xtn)))
-           (and (pair? self-date)
-                (pair? date)
-                (eq? (length self-date) 3)
-                (eq? (length date) 3)
-                (= (car self-date) (car date))
-                (= (cadr self-date) (cadr date))
-                (= (caddr self-date) (caddr date)))))
-        (n- (lambda (n) (gnc-numeric-neg n)))
-        (nsub (lambda (a b) (gnc-numeric-sub a b 0 GNC-DENOM-LCD)))
-        (n+ (lambda (a b) (gnc-numeric-add a b 0 GNC-DENOM-LCD)))
-        (n* (lambda (a b) (gnc-numeric-mul a b 0 GNC-DENOM-REDUCE)))
-        (n/ (lambda (a b) (gnc-numeric-div a b 0 GNC-DENOM-REDUCE))))
+         (match (cons date (qif-xtn:date xtn))
+           (((a b c) . (a b c)) #t)
+           (_ #f))))
 
     (if date-matches
         (begin
@@ -1230,6 +1226,20 @@
     (if all-marked
         (qif-xtn:set-mark! xtn #t))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;  gnc:account-tree-get-transactions
+;;
+;;  Given an account tree, this procedure returns a list of all
+;;  transactions whose splits only use accounts in the tree.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(define (gnc:account-tree-get-transactions root)
+  (let ((accounts (gnc-account-get-descendants-sorted root)))
+    (let ((q (qof-query-create-for-splits)))
+      (qof-query-set-book q (gnc-account-get-book root))
+      (xaccQueryAddAccountMatch q accounts QOF-GUID-MATCH-ANY QOF-QUERY-AND)
+      (let ((xtns (xaccQueryGetTransactions q QUERY-TXN-MATCH-ALL)))
+        (qof-query-destroy q)
+        xtns))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;  qif-import:qif-to-gnc-undo
@@ -1248,3 +1258,4 @@
       ;; Destroy the accounts
       (xaccAccountBeginEdit root)
       (xaccAccountDestroy root))))
+

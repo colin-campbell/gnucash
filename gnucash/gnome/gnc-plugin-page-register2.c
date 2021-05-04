@@ -78,6 +78,7 @@
 #include "gnc-icons.h"
 #include "gnc-prefs.h"
 #include "gnc-split-reg2.h"
+#include "gnc-ui.h"
 #include "gnc-ui-util.h"
 #include "gnc-window.h"
 #include "gnc-main-window.h"
@@ -129,8 +130,8 @@ static gchar *gnc_plugin_page_register2_filter_time2dmy (time64 raw_time);
 static gchar *gnc_plugin_page_register2_get_filter (GncPluginPage *plugin_page);
 void gnc_plugin_page_register2_set_filter (GncPluginPage *plugin_page, const gchar *filter);
 
-static void gnc_ppr_update_status_query (GncPluginPageRegister2 *page, gboolean refresh_page); 
-static void gnc_ppr_update_date_query (GncPluginPageRegister2 *page, gboolean refresh_page); 
+static void gnc_ppr_update_status_query (GncPluginPageRegister2 *page, gboolean refresh_page);
+static void gnc_ppr_update_date_query (GncPluginPageRegister2 *page, gboolean refresh_page);
 
 /* Command callbacks */
 static void gnc_plugin_page_register2_cmd_print_check (GtkAction *action, GncPluginPageRegister2 *plugin_page);
@@ -140,6 +141,7 @@ static void gnc_plugin_page_register2_cmd_paste (GtkAction *action, GncPluginPag
 static void gnc_plugin_page_register2_cmd_edit_account (GtkAction *action, GncPluginPageRegister2 *plugin_page);
 static void gnc_plugin_page_register2_cmd_find_account (GtkAction *action, GncPluginPageRegister2 *plugin_page);
 static void gnc_plugin_page_register2_cmd_find_transactions (GtkAction *action, GncPluginPageRegister2 *plugin_page);
+static void gnc_plugin_page_register2_cmd_edit_tax_options (GtkAction *action, GncPluginPageRegister2 *plugin_page);
 static void gnc_plugin_page_register2_cmd_cut_transaction (GtkAction *action, GncPluginPageRegister2 *plugin_page);
 static void gnc_plugin_page_register2_cmd_copy_transaction (GtkAction *action, GncPluginPageRegister2 *plugin_page);
 static void gnc_plugin_page_register2_cmd_paste_transaction (GtkAction *action, GncPluginPageRegister2 *plugin_page);
@@ -254,6 +256,18 @@ static GtkActionEntry gnc_plugin_page_register2_actions [] =
         N_("Find transactions with a search"),
         G_CALLBACK (gnc_plugin_page_register2_cmd_find_transactions)
     },
+    {
+        "EditTaxOptionsAction", NULL,
+        /* Translators: remember to reuse this
+           translation in dialog-account.glade */
+        N_("Ta_x Report Options"), NULL,
+        /* Translators: currently implemented are
+           US: income tax and
+           DE: VAT
+           So adjust this string                  */
+        N_("Setup relevant accounts for tax reports, e.g. US income tax"),
+        G_CALLBACK (gnc_plugin_page_register2_cmd_edit_tax_options)
+    },
 
     /* Transaction menu */
 
@@ -310,12 +324,12 @@ static GtkActionEntry gnc_plugin_page_register2_actions [] =
         G_CALLBACK (gnc_plugin_page_register2_cmd_reverse_transaction)
     },
     {
-        TRANSACTION_UP_ACTION, "go-up", N_("Move Transaction _Up"), NULL,
+        TRANSACTION_UP_ACTION, "pan-up-symbolic", N_("Move Transaction _Up"), NULL,
         N_("Move the current transaction one row upwards. Only available if the date and number of both rows are identical and the register window is sorted by date."),
         G_CALLBACK (gnc_plugin_page_register2_cmd_entryUp)
     },
     {
-        TRANSACTION_DOWN_ACTION, "go-down", N_("Move Transaction Do_wn"), NULL,
+        TRANSACTION_DOWN_ACTION, "pan-down-symbolic", N_("Move Transaction Do_wn"), NULL,
         N_("Move the current transaction one row downwards. Only available if the date and number of both rows are identical and the register window is sorted by date."),
         G_CALLBACK (gnc_plugin_page_register2_cmd_entryDown)
     },
@@ -370,8 +384,8 @@ static GtkActionEntry gnc_plugin_page_register2_actions [] =
         G_CALLBACK (gnc_plugin_page_register2_cmd_exchange_rate)
     },
     {
-        "JumpTransactionAction", GNC_ICON_JUMP_TO, N_("_Jump"), NULL,
-        N_("Jump to the corresponding transaction in the other account"),
+        "JumpTransactionAction", GNC_ICON_JUMP_TO, N_("_Jump to the other account"), NULL,
+        N_("Open a new register tab for the other account with focus on this transaction."),
         G_CALLBACK (gnc_plugin_page_register2_cmd_jump)
     },
     {
@@ -408,7 +422,7 @@ static GtkToggleActionEntry toggle_entries[] =
 {
     {
         "ViewStyleDoubleLineAction", NULL, N_("_Double Line"), NULL,
-        N_("Show two lines of information for each transaction"),
+        N_("Show a second line with \"Action\", \"Notes\", and \"Linked Document\" for each transaction."),
         G_CALLBACK (gnc_plugin_page_register2_cmd_style_double_line), FALSE
     },
 
@@ -486,6 +500,7 @@ static action_toolbar_labels toolbar_labels[] =
     { "DeleteTransactionAction", 	  N_("Delete") },
     { "DuplicateTransactionAction", N_("Duplicate") },
     { "SplitTransactionAction",     N_("Split") },
+    { "JumpTransactionAction",      N_("Jump") },
     { "ScheduleTransactionAction",  N_("Schedule") },
     { "BlankTransactionAction",     N_("Blank") },
     { "ActionsReconcileAction",     N_("Reconcile") },
@@ -555,9 +570,18 @@ typedef struct GncPluginPageRegister2Private
 } GncPluginPageRegister2Private;
 
 #define GNC_PLUGIN_PAGE_REGISTER2_GET_PRIVATE(o)  \
-   (G_TYPE_INSTANCE_GET_PRIVATE ((o), GNC_TYPE_PLUGIN_PAGE_REGISTER2, GncPluginPageRegister2Private))
+   ((GncPluginPageRegister2Private*)g_type_instance_get_private((GTypeInstance*)o, GNC_TYPE_PLUGIN_PAGE_REGISTER2))
 
 static GObjectClass *parent_class = NULL;
+
+static gpointer
+gnc_plug_page_register_check_commodity(Account *account, void* usr_data)
+{
+    // Check that account's commodity matches the commodity in usr_data
+    gnc_commodity* com0 = (gnc_commodity*) usr_data;
+    gnc_commodity* com1 = xaccAccountGetCommodity(account);
+    return gnc_commodity_equal(com1, com0) ? NULL : com1;
+}
 
 /************************************************************/
 /*                      Implementation                      */
@@ -630,6 +654,8 @@ gnc_plugin_page_register2_new (Account *account, gboolean subaccounts)
     GNCLedgerDisplay2 *ledger;
     GncPluginPage *page;
     GncPluginPageRegister2Private *priv;
+    gnc_commodity* com0;
+    gnc_commodity* com1;
 
 /*################## Added for Reg2 #################*/
     const GList *item;
@@ -657,9 +683,10 @@ gnc_plugin_page_register2_new (Account *account, gboolean subaccounts)
         }
     }
 /*################## Added for Reg2 #################*/
-
+    com0 = gnc_account_get_currency_or_parent(account);
+    com1 = gnc_account_foreach_descendant_until(account,gnc_plug_page_register_check_commodity,com0);
     if (subaccounts)
-        ledger = gnc_ledger_display2_subaccounts (account);
+        ledger = gnc_ledger_display2_subaccounts (account,com1!=NULL);
     else
         ledger = gnc_ledger_display2_simple (account);
 
@@ -896,7 +923,7 @@ gnc_plugin_page_register2_ui_update (gpointer various, GncPluginPageRegister2 *p
 
     /* Set 'Void' and 'Unvoid' */
     trans = gnc_tree_view_split_reg_get_current_trans (view);
-    voided = xaccTransHasSplitsInState (trans, VREC); 
+    voided = xaccTransHasSplitsInState (trans, VREC);
 
     action = gnc_plugin_page_get_action (GNC_PLUGIN_PAGE (page),
                                          "VoidTransactionAction");
@@ -1061,8 +1088,8 @@ gnc_plugin_page_register2_create_widget (GncPluginPage *plugin_page)
     gtk_box_set_homogeneous (GTK_BOX (priv->widget), FALSE);
     gtk_widget_show (priv->widget);
 
-    // Set the style context for this page so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(priv->widget), "GncRegisterPage");
+    // Set the name for this widget so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(priv->widget), "gnc-id-register2-page");
 
     numRows = priv->lines_default;
     numRows = MIN (numRows, DEFAULT_LINES_AMOUNT);
@@ -1483,6 +1510,11 @@ gnc_plugin_page_register2_recreate_page (GtkWidget *window,
         acct_name = g_key_file_get_string (key_file, group_name,
                                           KEY_ACCOUNT_NAME, &error);
         book = qof_session_get_book (gnc_get_current_session());
+        if (!book)
+        {
+            LEAVE("Session has no book");
+            return NULL;
+        }
         account = gnc_account_lookup_by_full_name (gnc_book_get_root_account(book),
                   acct_name);
         g_free (acct_name);
@@ -2582,7 +2614,7 @@ gnc_plugin_page_register2_cmd_print_check (GtkAction *action,
         {
             if (xaccSplitGetAccount(split) == account)
             {
-                splits = g_list_append(splits, split);
+                splits = g_list_prepend (splits, split);
                 gnc_ui_print_check_dialog_create (window, splits);
                 g_list_free(splits);
             }
@@ -2593,7 +2625,7 @@ gnc_plugin_page_register2_cmd_print_check (GtkAction *action,
                 split = gnc_tree_model_split_reg_trans_get_split_equal_to_ancestor(trans, account);
                 if (split)
                 {
-                    splits = g_list_append(splits, split);
+                    splits = g_list_prepend (splits, split);
                     gnc_ui_print_check_dialog_create (window, splits);
                     g_list_free(splits);
                 }
@@ -2645,6 +2677,7 @@ gnc_plugin_page_register2_cmd_print_check (GtkAction *action,
             }
         }
         gnc_ui_print_check_dialog_create (window, splits);
+        g_list_free (splits);
     }
     else
     {
@@ -2759,6 +2792,25 @@ gnc_plugin_page_register2_cmd_find_transactions (GtkAction *action,
     priv = GNC_PLUGIN_PAGE_REGISTER2_GET_PRIVATE(page);
 
     gnc_ui_find_transactions_dialog_create2 (priv->ledger);
+    LEAVE(" ");
+}
+
+static void
+gnc_plugin_page_register2_cmd_edit_tax_options (GtkAction *action,
+        GncPluginPageRegister2 *page) // this works
+{
+    GncPluginPageRegister2Private *priv;
+    GtkWidget *window;
+    Account* account;
+
+    g_return_if_fail(GNC_IS_PLUGIN_PAGE_REGISTER2(page));
+
+    ENTER("(action %p, page %p)", action, page);
+    priv = GNC_PLUGIN_PAGE_REGISTER2_GET_PRIVATE(page);
+
+    window = gnc_plugin_page_get_window (GNC_PLUGIN_PAGE (page));
+    account = gnc_plugin_page_register2_get_account (page);
+    gnc_tax_info_dialog (window, account);
     LEAVE(" ");
 }
 
@@ -3929,7 +3981,7 @@ gnc_plugin_page_register2_close_cb (gpointer user_data)
 
 /** This function is called when an account has been edited and an
  *  "extreme" change has been made to it.  (E.G. Changing from a
- *  credit card account to an expense account.  This rouine is
+ *  credit card account to an expense account.  This routine is
  *  responsible for finding all open registers containing the account
  *  and closing them.
  *
@@ -3957,24 +4009,26 @@ gppr_account_destroy_cb (Account *account)
         ledger_type = gnc_ledger_display2_type (priv->ledger);
         if (ledger_type == LD2_GL)
         {
-            kill = g_list_append(kill, page);
+            kill = g_list_prepend (kill, page);
             /* kill it */
         }
         else if ((ledger_type == LD2_SINGLE) || (ledger_type == LD2_SUBACCOUNT))
         {
             if (guid_compare(acct_guid, &priv->key) == 0)
             {
-                kill = g_list_append(kill, page);
+                kill = g_list_prepend (kill, page);
             }
         }
     }
 
+    kill = g_list_reverse (kill);
     /* Now kill them. */
     for (item = kill; item; item = g_list_next(item))
     {
         page = (GncPluginPageRegister2 *)item->data;
         gnc_main_window_close_page(GNC_PLUGIN_PAGE(page));
     }
+    g_list_free (kill);
 }
 
 /** This function is the handler for all event messages from the

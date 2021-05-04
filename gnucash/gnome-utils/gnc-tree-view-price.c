@@ -58,7 +58,7 @@ typedef struct GncTreeViewPricePrivate
 } GncTreeViewPricePrivate;
 
 #define GNC_TREE_VIEW_PRICE_GET_PRIVATE(o)  \
-   (G_TYPE_INSTANCE_GET_PRIVATE ((o), GNC_TYPE_TREE_VIEW_PRICE, GncTreeViewPricePrivate))
+   ((GncTreeViewPricePrivate*)g_type_instance_get_private((GTypeInstance*)o, GNC_TYPE_TREE_VIEW_PRICE))
 
 
 /************************************************************/
@@ -382,7 +382,7 @@ gnc_tree_view_price_new (QofBook *book,
 
     /* Create our view */
     view = g_object_new (GNC_TYPE_TREE_VIEW_PRICE,
-                         "name", "price_tree", NULL);
+                         "name", "gnc-id-price-tree", NULL);
     gtk_tree_view_set_model (GTK_TREE_VIEW (view), s_model);
     g_object_unref(G_OBJECT(s_model));
 

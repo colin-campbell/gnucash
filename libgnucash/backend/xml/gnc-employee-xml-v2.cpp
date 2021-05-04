@@ -21,16 +21,15 @@
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  *                                                                  *
 \********************************************************************/
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
-
-#include <glib.h>
 #include <stdlib.h>
 #include <string.h>
 #include "gncEmployeeP.h"
 }
-
 #include "gnc-xml-helper.h"
 #include "sixtp.h"
 #include "sixtp-utils.h"
@@ -178,7 +177,7 @@ employee_guid_handler (xmlNodePtr node, gpointer employee_pdata)
         gncEmployeeSetGUID (pdata->employee, guid);
     }
 
-    g_free (guid);
+    guid_free (guid);
 
     return TRUE;
 }
@@ -282,7 +281,7 @@ employee_ccard_handler (xmlNodePtr node, gpointer employee_pdata)
     g_return_val_if_fail (guid, FALSE);
 
     ccard_acc = xaccAccountLookup (guid, pdata->book);
-    g_free (guid);
+    guid_free (guid);
 
     g_return_val_if_fail (ccard_acc, FALSE);
     gncEmployeeSetCCard (pdata->employee, ccard_acc);

@@ -90,7 +90,7 @@ typedef struct gnc_commodityPrivate
 } gnc_commodityPrivate;
 
 #define GET_PRIVATE(o) \
-    (G_TYPE_INSTANCE_GET_PRIVATE((o), GNC_TYPE_COMMODITY, gnc_commodityPrivate))
+    ((gnc_commodityPrivate*)g_type_instance_get_private((GTypeInstance*)o, GNC_TYPE_COMMODITY))
 
 struct _GncCommodityClass
 {
@@ -138,7 +138,7 @@ struct gnc_new_iso_code
     {"TRL", "TRY"}, /* New Turkish Lira: changed 2005 */
 
     /* Only add currencies to this table when the old currency no longer
-     * exists in the file iso-4217-currencies.scm */
+     * exists in the file iso-4217-currencies.xml */
 };
 #define GNC_NEW_ISO_CODES \
         (sizeof(gnc_new_iso_codes) / sizeof(struct gnc_new_iso_code))
@@ -167,7 +167,7 @@ static gnc_quote_source currency_quote_source =
 { TRUE, 0, 0, "Currency", "CURRENCY", "currency" };
 
 /* The single quote method is usually the module name, but
- * sometimes it get's the suffix "_direct"
+ * sometimes it gets the suffix "_direct"
  * and the failover method is without suffix.
  */
 static gnc_quote_source single_quote_sources[] =
@@ -1747,7 +1747,7 @@ gnc_commodity_table_new(void)
 }
 
 /********************************************************************
- * book anchor functons
+ * book anchor functions
  ********************************************************************/
 
 gnc_commodity_table *

@@ -1,16 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.22.1 -->
+<!-- Generated with glade 3.36.0 -->
 <interface>
-  <requires lib="gtk+" version="3.10"/>
+  <requires lib="gtk+" version="3.22"/>
   <object class="GtkDialog" id="job_dialog">
     <property name="can_focus">False</property>
     <property name="title" translatable="yes">Job Dialog</property>
     <property name="resizable">False</property>
     <property name="type_hint">dialog</property>
     <signal name="destroy" handler="gnc_job_window_destroy_cb" swapped="no"/>
-    <child>
-      <placeholder/>
-    </child>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox3">
         <property name="visible">True</property>
@@ -36,6 +33,7 @@
                 <property name="expand">False</property>
                 <property name="fill">False</property>
                 <property name="position">0</property>
+                <property name="secondary">True</property>
               </packing>
             </child>
             <child>
@@ -94,7 +92,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="border_width">6</property>
-                    <property name="row_spacing">6</property>
+                    <property name="row_spacing">3</property>
                     <property name="column_spacing">6</property>
                     <child>
                       <object class="GtkLabel" id="label1">
@@ -183,7 +181,7 @@
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
                     <property name="border_width">6</property>
-                    <property name="row_spacing">6</property>
+                    <property name="row_spacing">3</property>
                     <property name="column_spacing">6</property>
                     <child>
                       <object class="GtkLabel" id="owner_label">
@@ -326,5 +324,8 @@
       <action-widget response="-6">cancelbutton</action-widget>
       <action-widget response="-5">okbutton</action-widget>
     </action-widgets>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
   </object>
 </interface>

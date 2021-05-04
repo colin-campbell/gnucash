@@ -200,7 +200,7 @@ gboolean gncEntryPaymentStringToType (const char *str, GncEntryPaymentType *type
 	member = tmp; \
 	}
 
-G_INLINE_FUNC void mark_entry (GncEntry *entry);
+static inline void mark_entry (GncEntry *entry);
 void mark_entry (GncEntry *entry)
 {
     qof_instance_set_dirty(&entry->inst);
@@ -1088,7 +1088,7 @@ GncOrder * gncEntryGetOrder (const GncEntry *entry)
  * to let a consumer know how much they saved.
  *
  * Note this function will not do any rounding unless forced to prevent overflow.
- * It's the caller's responsability to round to the proper commodity
+ * It's the caller's responsibility to round to the proper commodity
  * denominator if needed.
  */
 static void gncEntryComputeValueInt (gnc_numeric qty, gnc_numeric price,

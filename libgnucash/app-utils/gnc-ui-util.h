@@ -46,6 +46,21 @@ typedef QofSession * (*QofSessionCB) (void);
 gchar *gnc_normalize_account_separator (const gchar* separator);
 gboolean gnc_reverse_balance(const Account *account);
 
+/* Backward compatibility *******************************************
+ * Return book's UNREVERSED_BUDGET feature check. */
+gboolean gnc_using_unreversed_budgets (QofBook* book);
+
+/* Backward compatibility *******************************************
+ * Compare book's UNREVERSED_BUDGET with unreverse_check. If they
+ * match, return account reversal according to global pref. If they
+ * don't match, return FALSE. */
+gboolean gnc_reverse_budget_balance (const Account *account, gboolean unreversed);
+
+/* Backward compatibility *******************************************
+ * Return that book's support opening balance accounts by equity type slot */
+void gnc_set_use_equity_type_opening_balance_account (QofBook* book);
+gboolean gnc_using_equity_type_opening_balance_account (QofBook* book);
+
 /* Default directory sections ***************************************/
 #define GNC_PREFS_GROUP_OPEN_SAVE    "dialogs.open-save"
 #define GNC_PREFS_GROUP_EXPORT       "dialogs.export-accounts"
@@ -179,6 +194,29 @@ const char * gnc_get_reconcile_str (char reconciled_flag);
 const char * gnc_get_reconcile_valid_flags (void);
 const char * gnc_get_reconcile_flag_order (void);
 
+#define WLINK 'w'
+#define FLINK 'f'
+
+/** Get a string containing documentation link valid flags
+ *
+ *  @return a string containing the list of valid link_flags
+ */
+const char *gnc_get_doclink_valid_flags (void);
+
+/** Get a string containing document link flag order
+ *
+ * @return a string containing the document link flag change order
+ */
+const char *gnc_get_doclink_flag_order (void);
+
+/** Get a string representing the document link type
+ *
+ * @param  link_flag The flag to convert into a string
+ *
+ * @return the i18n'd doclink string
+ */
+const char *gnc_get_doclink_str (char link_flag);
+
 typedef enum
 {
     EQUITY_OPENING_BALANCE,
@@ -205,9 +243,6 @@ gnc_commodity * gnc_locale_default_currency_nodefault (void);
  * no currency could be identified from the locale, this one returns
  * "USD", but this will have nothing to do with the actual locale. */
 gnc_commodity * gnc_locale_default_currency (void);
-
-/* Returns the default ISO currency string of the current locale. */
-const char * gnc_locale_default_iso_currency_code (void);
 
 
 /** Return the default currency set by the user.  If the user's
@@ -293,6 +328,9 @@ GNCPrintAmountInfo gnc_account_print_info (const Account *account,
 GNCPrintAmountInfo gnc_split_amount_print_info (Split *split,
         gboolean use_symbol);
 
+GNCPrintAmountInfo gnc_price_print_info (const gnc_commodity *curr,
+        gboolean use_symbol);
+
 GNCPrintAmountInfo gnc_share_print_info_places (int decplaces);
 GNCPrintAmountInfo gnc_default_share_print_info (void);
 GNCPrintAmountInfo gnc_default_price_print_info (const gnc_commodity *curr);
@@ -325,7 +363,7 @@ gboolean xaccParseAmount (const char * in_str, gboolean monetary,
 
 /*
  * xaccParseAmountPosSign is just like xaccParseAmount except the
- * caller can choose whether the locale's postive sign (or in absense
+ * caller can choose whether the locale's positive sign (or in absence
  * the '+') character is ignored. Setting skip to TRUE will cause
  * the function to ignore any positive sign. Setting it to FALSE,
  * and positive signs will be treated as unrecognized characters.
@@ -354,6 +392,10 @@ xaccParseAmountExtended (const char * in_str, gboolean monetary,
 /* Initialization ***************************************************/
 
 void gnc_ui_util_init (void);
+
+/* Remove callback preferences **************************************/
+
+void gnc_ui_util_remove_registered_prefs (void);
 
 #endif
 /** @} */

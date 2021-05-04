@@ -16,8 +16,140 @@
 ;; Free Software Foundation           Voice:  +1-617-542-5942
 ;; 51 Franklin Street, Fifth Floor    Fax:    +1-617-542-2652
 ;; Boston, MA  02110-1301,  USA       gnu@gnu.org
+
+(define-module (gnucash app-utils options))
+
+(eval-when (compile load eval expand)
+  (load-extension "libgnc-app-utils" "scm_init_sw_app_utils_module"))
+
+(use-modules (gnucash core-utils))
+(use-modules (gnucash engine))
+(use-modules (sw_app_utils))
+(use-modules (gnucash app-utils date-utilities))
+(use-modules (gnucash utilities))
+(use-modules (srfi srfi-1))
 (use-modules (ice-9 regex))
-(use-modules (gnucash gettext))
+
+(export gnc:color->html)
+(export gnc:color-option->hex-string)
+(export gnc:color-option->html)
+(export gnc:currency-accounting-option-get-curr-doc-string)
+(export gnc:currency-accounting-option-get-default-curr)
+(export gnc:currency-accounting-option-get-default-policy)
+(export gnc:currency-accounting-option-get-gain-loss-account-doc-string)
+(export gnc:currency-accounting-option-get-policy-doc-string)
+(export gnc:currency-accounting-option-selected-currency)
+(export gnc:currency-accounting-option-selected-gain-loss-account)
+(export gnc:currency-accounting-option-selected-method)
+(export gnc:currency-accounting-option-selected-policy)
+(export gnc:date-option-absolute-time)
+(export gnc:date-option-get-subtype)
+(export gnc:date-option-relative-time)
+(export gnc:date-option-show-time?)
+(export gnc:date-option-value-type)
+(export gnc:dateformat-get-format)
+(export gnc:generate-restore-forms)
+(export gnc:get-rd-option-data-rd-list)
+(export gnc:get-rd-option-data-show-time)
+(export gnc:get-rd-option-data-subtype)
+(export gnc:lookup-option)
+(export gnc:make-account-list-limited-option)
+(export gnc:make-account-list-option)
+(export gnc:make-account-sel-limited-option)
+(export gnc:make-account-sel-option)
+(export gnc:make-budget-option)
+(export gnc:make-color-option)
+(export gnc:make-commodity-option)
+(export gnc:make-complex-boolean-option)
+(export gnc:make-currency-option)
+(export gnc:make-date-option)
+(export gnc:make-dateformat-option)
+(export gnc:make-font-option)
+(export gnc:make-internal-option)
+(export gnc:make-list-option)
+(export gnc:make-multichoice-callback-option)
+(export gnc:make-multichoice-option)
+(export gnc:make-number-plot-size-option)
+(export gnc:make-number-range-option)
+(export gnc:make-option)
+(export gnc:make-pixmap-option)
+(export gnc:make-query-option)
+(export gnc:make-radiobutton-callback-option)
+(export gnc:make-radiobutton-option)
+(export gnc:make-simple-boolean-option)
+(export gnc:make-string-option)
+(export gnc:make-text-option)
+(export gnc:multichoice-list-lookup)
+(export gnc:new-options)
+(export gnc:option-data)
+(export gnc:option-data-fns)
+(export gnc:option-default-getter)
+(export gnc:option-default-value)
+(export gnc:option-documentation)
+(export gnc:option-generate-restore-form)
+(export gnc:option-get-value)
+(export gnc:option-getter)
+(export gnc:option-index-get-name)
+(export gnc:option-index-get-value)
+(export gnc:option-kvp->scm)
+(export gnc:option-make-internal!)
+(export gnc:option-name)
+(export gnc:option-number-of-indices)
+(export gnc:option-scm->kvp)
+(export gnc:option-section)
+(export gnc:option-set-changed-callback)
+(export gnc:option-set-default-value)
+(export gnc:option-set-value)
+(export gnc:option-setter)
+(export gnc:option-sort-tag)
+(export gnc:option-strings-getter)
+(export gnc:option-type)
+(export gnc:option-value)
+(export gnc:option-value-get-index)
+(export gnc:option-value-validator)
+(export gnc:option-widget-changed-proc)
+(export gnc:options-clear-changes)
+(export gnc:options-copy-values)
+(export gnc:options-for-each)
+(export gnc:options-for-each-general)
+(export gnc:options-get-default-section)
+(export gnc:options-kvp->scm)
+(export gnc:options-make-date-interval!)
+(export gnc:options-make-end-date!)
+(export gnc:options-register-c-callback)
+(export gnc:options-register-callback)
+(export gnc:options-run-callbacks)
+(export gnc:options-scm->kvp)
+(export gnc:options-set-default-section)
+(export gnc:options-touch)
+(export gnc:options-unregister-callback-id)
+(export gnc:plot-size-option-value)
+(export gnc:plot-size-option-value-type)
+(export gnc:register-option)
+(export gnc:restore-form-generator)
+(export gnc:send-options)
+(export gnc:set-option-kvp->scm)
+(export gnc:set-option-scm->kvp)
+(export gnc:unregister-option)
+(export gnc:value->string)
+
+(export gnc:*option-name-trading-accounts*)
+(export gnc:*option-name-book-currency*)
+(export gnc:*option-section-accounts*)
+(export gnc:*option-name-default-gains-policy*)
+(export gnc:*option-name-default-gain-loss-account*)
+
+(define gnc:*option-section-accounts* OPTION-SECTION-ACCOUNTS)
+(define gnc:*option-name-trading-accounts* OPTION-NAME-TRADING-ACCOUNTS)
+(define gnc:*option-name-currency-accounting* OPTION-NAME-CURRENCY-ACCOUNTING)
+(define gnc:*option-name-book-currency* OPTION-NAME-BOOK-CURRENCY)
+(define gnc:*option-name-default-gains-policy* OPTION-NAME-DEFAULT-GAINS-POLICY)
+(define gnc:*option-name-default-gain-loss-account*
+  OPTION-NAME-DEFAULT-GAINS-LOSS-ACCT-GUID)
+
+(define (gnc:option-get-value book category key)
+  (define acc (if (pair? key) cons list))
+  (qof-book-get-option book (acc category key)))
 
 (define (rpterror-earlier type newoption fallback)
   ;; Translators: the 3 ~a below refer to (1) option type (2) unknown
@@ -27,7 +159,7 @@
 GnuCash. One of the newer ~a options '~a' is not available, fallback to \
 the option '~a'."))
          (console-msg (format #f template type newoption fallback))
-         (ui-msg (format #f (_ template) type newoption fallback)))
+         (ui-msg (format #f (G_ template) type newoption fallback)))
     (gnc:gui-warn console-msg ui-msg)))
 
 (define (gnc:make-option
@@ -71,8 +203,7 @@ the option '~a'."))
          ;; Function 3: taking one argument, a non-negative integer,
          ;; that returns the string matching the nth choice
          ;;
-         ;; Function 4: takes one argument and returns the description
-         ;; containing the nth choice
+         ;; Function 4: #f, this was the individual tool tip and not used now
          ;;
          ;; Function 5: giving a possible value and returning the index
          ;; if an option doesn't use these,  this should just be a #f
@@ -163,11 +294,6 @@ the option '~a'."))
 (define (gnc:option-index-get-name option index)
   (let* ((option-data-fns (gnc:option-data-fns option))
          (name-fn (vector-ref option-data-fns 2)))
-    (name-fn index)))
-
-(define (gnc:option-index-get-description option index)
-  (let* ((option-data-fns (gnc:option-data-fns option))
-         (name-fn (vector-ref option-data-fns 3)))
     (name-fn index)))
 
 (define (gnc:option-index-get-value option index)
@@ -867,6 +993,14 @@ the option '~a'."))
         (rpterror-earlier "multichoice" item (car full-lst))
         0)))
 
+(define (check-ok-values ok-values fn)
+  (for-each
+   (lambda (ok-value)
+     (when (> (vector-length ok-value) 2)
+       (issue-deprecation-warning
+        (format #f "~a: the tooltip in ~a is not supported anymore. Please remove." fn ok-value))))
+   ok-values))
+
 ;; multichoice options use the option-data as a list of vectors.
 ;; Each vector contains a permissible value (scheme symbol), a
 ;; name, and a description string.
@@ -914,8 +1048,9 @@ the option '~a'."))
     (if (null? p-vals)
         '()
         (cons (vector-ref (car p-vals) 1)
-              (cons (vector-ref (car p-vals) 2)
-                    (multichoice-strings (cdr p-vals))))))
+              (multichoice-strings (cdr p-vals)))))
+
+  (check-ok-values ok-values "gnc:make-multichoice-[callback-]option")
 
   (let* ((value default-value)
          (value->string (lambda ()
@@ -924,12 +1059,18 @@ the option '~a'."))
      section name sort-tag 'multichoice documentation-string
      (lambda () value)
      (lambda (x)
-       (if (multichoice-legal x ok-values)
-           (begin
-             (set! value x)
-             (if (procedure? setter-function-called-cb)
-                 (setter-function-called-cb x)))
-           (rpterror-earlier "multichoice" x default-value)))
+       (cond
+        ((and (equal? section "Display")
+              (equal? name "Parent account subtotals")
+              (equal? x 'canonically-tabbed))
+         (gnc:warn "canonically-tabbed obsolete. switching to 't")
+         (set! value 't))
+        ((not (multichoice-legal x ok-values))
+         (rpterror-earlier "multichoice" x default-value))
+        (else
+         (set! value x)
+         (if (procedure? setter-function-called-cb)
+             (setter-function-called-cb x)))))
      (lambda () default-value)
      (gnc:restore-form-generator value->string)
      (lambda (b p) (qof-book-set-option b (symbol->string value) p))
@@ -945,7 +1086,7 @@ the option '~a'."))
      (vector (lambda () (length ok-values))
              (lambda (x) (vector-ref (list-ref ok-values x) 0))
              (lambda (x) (vector-ref (list-ref ok-values x) 1))
-             (lambda (x) (vector-ref (list-ref ok-values x) 2))
+             #f                         ;old tooltip
              (lambda (x)
                (gnc:multichoice-list-lookup ok-values x)))
      (lambda () (multichoice-strings ok-values)) 
@@ -1000,8 +1141,7 @@ the option '~a'."))
     (if (null? p-vals)
         '()
         (cons (vector-ref (car p-vals) 1)
-              (cons (vector-ref (car p-vals) 2)
-                    (radiobutton-strings (cdr p-vals))))))
+              (radiobutton-strings (cdr p-vals)))))
 
   (let* ((value default-value)
          (value->string (lambda ()
@@ -1031,7 +1171,7 @@ the option '~a'."))
      (vector (lambda () (length ok-values))
              (lambda (x) (vector-ref (list-ref ok-values x) 0))
              (lambda (x) (vector-ref (list-ref ok-values x) 1))
-             (lambda (x) (vector-ref (list-ref ok-values x) 2))
+             #f                         ;old tooltip
              (lambda (x)
                (gnc:multichoice-list-lookup ok-values x)))
      (lambda () (radiobutton-strings ok-values)) 
@@ -1065,8 +1205,9 @@ the option '~a'."))
     (if (null? p-vals)
         '()
         (cons (vector-ref (car p-vals) 1)
-              (cons (vector-ref (car p-vals) 2)
-                    (list-strings (cdr p-vals))))))
+              (list-strings (cdr p-vals)))))
+
+  (check-ok-values ok-values "gnc:make-list-option")
 
   (let* ((value default-value)
          (value->string (lambda ()
@@ -1103,7 +1244,7 @@ the option '~a'."))
      (vector (lambda () (length ok-values))
              (lambda (x) (vector-ref (list-ref ok-values x) 0))
              (lambda (x) (vector-ref (list-ref ok-values x) 1))
-             (lambda (x) (vector-ref (ref ok-values x) 2))
+             #f                         ;old tooltip
              (lambda (x) (gnc:multichoice-list-lookup ok-values x)))
      (lambda () (list-strings ok-values)) #f)))
 
@@ -1653,70 +1794,80 @@ the option '~a'."))
 
   (define callback-hash (make-hash-table 23))
   (define last-callback-id 0)
+  (define new-names-alist
+    '(("Accounts to include" #f "Accounts")
+      ("Exclude transactions between selected accounts?" #f
+       "Exclude transactions between selected accounts")
+      ("Filter Accounts" #f "Filter By...")
+      ("Flatten list to depth limit?" #f "Flatten list to depth limit")
+      ("From" #f "Start Date")
+      ("Report Accounts" #f "Accounts")
+      ("Report Currency" #f "Report's currency")
+      ("Show Account Code?" #f "Show Account Code")
+      ("Show Full Account Name?" #f "Show Full Account Name")
+      ("Show Multi-currency Totals?" #f "Show Multi-currency Totals")
+      ("Show zero balance items?" #f "Show zero balance items")
+      ("Sign Reverses?" #f "Sign Reverses")
+      ("To" #f "End Date")
+      ("Charge Type" #f "Action") ;easy-invoice.scm, renamed June 2018
+      ;; the following 4 options in income-gst-statement.scm renamed Dec 2018
+      ("Individual income columns" #f "Individual sales columns")
+      ("Individual expense columns" #f "Individual purchases columns")
+      ("Remittance amount" #f "Gross Balance")
+      ("Net Income" #f "Net Balance")
+      ;; transaction.scm:
+      ("Use Full Account Name?" #f "Use Full Account Name")
+      ("Use Full Other Account Name?" #f "Use Full Other Account Name")
+      ("Void Transactions?" "Filter" "Void Transactions")
+      ("Void Transactions" "Filter" "Void Transactions")
+      ("Account Substring" "Filter" "Account Name Filter")
+      ("Enable links" #f "Enable Links")
+      ;; trep-engine: moved currency options to own tab
+      ("Common Currency" "Currency" "Common Currency")
+      ("Show original currency amount" "Currency" "Show original currency amount")
+      ("Report's currency" "Currency" "Report's currency")
+      ("Reconcile Status" #f "Reconciled Status")
+      ;; new-owner-report.scm, renamed Oct 2020 to differentiate with
+      ;; Document Links:
+      ("Links" #f "Transaction Links")
+      ;; invoice.scm, renamed November 2018
+      ("Individual Taxes" #f "Use Detailed Tax Summary")
+      ;; income-gst-statement.scm
+      ("default format" #f "Default Format")
+      ("Report format" #f "Report Format")
+      ))
 
   (define (lookup-option section name)
     (let ((section-hash (hash-ref option-hash section)))
-      (if section-hash
-          (let ((option-hash (hash-ref section-hash name)))
-            (if option-hash
-                option-hash
-                ;; Option name was not found. Perhaps it was renamed ?
-                ;; Let's try to map it to a known new name.
-                ;; This list will try match names - if one is found
-                ;; the next item will describe a pair.
-                ;; (cons newsection newname)
-                ;; If newsection is #f then reuse previous section name.
-                ;;
-                ;; Please note the rename list currently supports renaming
-                ;; individual option names, or individual option names moved
-                ;; to another section. It does not currently support renaming
-                ;; whole sections.
-                (let* ((new-names-list (list
-                                        "Accounts to include" (cons #f "Accounts")
-                                        "Exclude transactions between selected accounts?" (cons #f "Exclude transactions between selected accounts")
-                                        "Filter Accounts" (cons #f "Filter By...")
-                                        "Flatten list to depth limit?" (cons #f "Flatten list to depth limit")
-                                        "From" (cons #f "Start Date")
-                                        "Report Accounts" (cons #f "Accounts")
-                                        "Report Currency" (cons #f "Report's currency")
-                                        "Show Account Code?" (cons #f "Show Account Code")
-                                        "Show Full Account Name?" (cons #f "Show Full Account Name")
-                                        "Show Multi-currency Totals?" (cons #f "Show Multi-currency Totals")
-                                        "Show zero balance items?" (cons #f "Show zero balance items")
-                                        "Sign Reverses?" (cons #f "Sign Reverses")
-                                        "To" (cons #f "End Date")
-                                        "Charge Type" (cons #f "Action") ;easy-invoice.scm, renamed June 2018
-                                        ;; the following 4 options in income-gst-statement.scm renamed Dec 2018
-                                        "Individual income columns" (cons #f "Individual sales columns")
-                                        "Individual expense columns" (cons #f "Individual purchases columns")
-                                        "Remittance amount" (cons #f "Gross Balance")
-                                        "Net Income" (cons #f "Net Balance")
-                                        ;; transaction.scm:
-                                        "Use Full Account Name?" (cons #f "Use Full Account Name")
-                                        "Use Full Other Account Name?" (cons #f "Use Full Other Account Name")
-                                        "Void Transactions?" (cons "Filter" "Void Transactions")
-                                        "Void Transactions" (cons "Filter" "Void Transactions")
-                                        "Account Substring" (cons "Filter" "Account Name Filter")
-                                        ;; invoice.scm, renamed November 2018
-                                        "Individual Taxes" (cons "#f" "Use Detailed Tax Summary")
-                                        ))
-                       (name-match (member name new-names-list)))
-
-                  (and name-match
-                       (let ((new-section (car (cadr name-match)))
-                             (new-name (cdr (cadr name-match))))
-                         (gnc:debug
-                          (format #f "option ~s/~s has been renamed to ~s/~s\n"
-                                  section name new-section new-name))
-                         ;; compare if new-section name exists.
-                         (if new-section
-                             ;; if so, if it's different to current section name
-                             ;; then try new section name
-                             (and (not (string=? new-section section))
-                                  (lookup-option new-section new-name))
-                             ;; else reuse section-name with new-name
-                             (lookup-option section new-name)))))))
-          #f)))
+      (and section-hash
+           (or (hash-ref section-hash name)
+               ;; Option name was not found. Perhaps it was renamed?
+               ;; Let's try to map to a known new name.  The alist
+               ;; new-names-alist will try match names - car is the old
+               ;; name, cdr is the 2-element list describing
+               ;; newsection newname. If newsection is #f then reuse
+               ;; previous section name. Please note the rename list
+               ;; currently supports renaming individual option names,
+               ;; or individual option names moved to another
+               ;; section. It does not currently support renaming
+               ;; whole sections.
+               (let ((name-match (assoc-ref new-names-alist name)))
+                 (and name-match
+                      (let ((new-section (car name-match))
+                            (new-name (cadr name-match)))
+                        (gnc:warn
+                         (format #f "option ~a/~a has been renamed to ~a/~a\n"
+                                 section name new-section new-name))
+                        (cond
+                         ;; new-name only
+                         ((not new-section)
+                          (lookup-option section new-name))
+                         ;; new-section different to current section
+                         ;; name, and possibly new-name
+                         ((not (string=? new-section section))
+                          (lookup-option new-section new-name))
+                         ;; no match, return #f
+                         (else #f)))))))))
 
   (define (option-changed section name)
     (set! options-changed #t)
@@ -1936,12 +2087,6 @@ the option '~a'."))
 (define (gnc:generate-restore-forms options options-string)
   ((options 'generate-restore-forms) options-string))
 
-(define (gnc:options-fancy-date book)
-  (let ((date-format (gnc:fancy-date-info book gnc:*fancy-date-format*)))
-    (if (boolean? date-format) ;; date-format does not exist
-        (qof-date-format-get-string (qof-date-format-get))
-       date-format)))
-
 (define (gnc:options-scm->kvp options book clear-option?)
   (if clear-option?
       (qof-book-options-delete book '()))
@@ -1986,19 +2131,6 @@ the option '~a'."))
    (lambda (option)
      (gnc-option-db-register-option db_handle option))
    options))
-
-(define (gnc:save-options options options-string file header truncate?)
-  (issue-deprecation-warning
-   "gnc:save-options is deprecated.")
-  (let ((code (gnc:generate-restore-forms options options-string))
-        (port (false-if-exception
-               (if truncate? 
-                   (open file (logior O_WRONLY O_CREAT O_TRUNC))
-                   (open file (logior O_WRONLY O_CREAT O_APPEND))))))
-    (if port (begin
-               (display header port)
-               (display code port)
-               (close port)))))
 
 (define (gnc:options-make-end-date! options pagename optname sort-tag info)
   (gnc:register-option 

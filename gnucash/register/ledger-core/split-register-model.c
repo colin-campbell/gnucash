@@ -27,12 +27,14 @@
 
 #include "datecell.h"
 #include "dialog-utils.h"
+#include "dialog-doclink-utils.h"
 #include "gnc-engine.h"
 #include "gnc-prefs.h"
 #include "gnc-ui.h"
 #include "gnc-uri-utils.h"
 #include "gnc-filepath-utils.h"
 #include "gnc-warnings.h"
+#include "doclinkcell.h"
 #include "pricecell.h"
 #include "recncell.h"
 #include "split-register.h"
@@ -52,16 +54,17 @@ static gboolean use_red_for_negative = TRUE;
  * If gboolean subaccounts is TRUE, then it will return the total balance of the parent account
  * and all its subaccounts. FALSE will return the balance of just the parent account of the register. */
 static gnc_numeric
-gnc_split_register_get_rbaln (VirtualLocation virt_loc, gpointer user_data, gboolean subaccounts)
+gnc_split_register_get_rbaln (VirtualLocation virt_loc, gpointer user_data,
+                              gboolean subaccounts)
 {
-    SplitRegister *reg = user_data;
-    Split *split;
-    SRInfo *info = gnc_split_register_get_info (reg);
+    SplitRegister* reg = user_data;
+    Split* split;
+    SRInfo* info = gnc_split_register_get_info (reg);
     gnc_numeric balance;
-    Account *account = NULL;
-    Transaction *trans;
-    GList *node, *child;
-    GList *children = NULL;
+    Account* account = NULL;
+    Transaction* trans;
+    GList* node, *child;
+    GList* children = NULL;
     int i, row;
 
     balance = gnc_numeric_zero();
@@ -69,7 +72,7 @@ gnc_split_register_get_rbaln (VirtualLocation virt_loc, gpointer user_data, gboo
     /* Return NULL if this is a blank transaction. */
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (split == xaccSplitLookup (&info->blank_split_guid,
-                                  gnc_get_current_book ()))
+                                  gnc_get_current_book()))
         return gnc_numeric_zero();
 
     trans = xaccSplitGetParent (split);
@@ -77,7 +80,7 @@ gnc_split_register_get_rbaln (VirtualLocation virt_loc, gpointer user_data, gboo
         return gnc_numeric_zero();
 
     /* Get a list of accounts for matching */
-    account = gnc_split_register_get_default_account(reg);
+    account = gnc_split_register_get_default_account (reg);
     if (!account)
         /* Register has no account (perhaps general journal) so it has no
            well defined balance, return zero. */
@@ -85,15 +88,15 @@ gnc_split_register_get_rbaln (VirtualLocation virt_loc, gpointer user_data, gboo
 
     if (subaccounts)
     {
-        children = gnc_account_get_descendants(account);
-        children = g_list_append(children, account);
+        children = gnc_account_get_descendants (account);
+        children = g_list_append (children, account);
     }
 
     /* Get the row number we're on, then start with the first row. */
     row = virt_loc.vcell_loc.virt_row;
     virt_loc.vcell_loc.virt_row = 0;
 
-    while (virt_loc.vcell_loc.virt_row <= row )
+    while (virt_loc.vcell_loc.virt_row <= row)
     {
         /* Get new temporary split and its parent transaction */
         split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
@@ -102,7 +105,7 @@ gnc_split_register_get_rbaln (VirtualLocation virt_loc, gpointer user_data, gboo
         i = 1;
         for (node = xaccTransGetSplitList (trans); node; node = node->next)
         {
-            Split *secondary = node->data;
+            Split* secondary = node->data;
             i++;
 
             if (subaccounts)
@@ -115,40 +118,40 @@ gnc_split_register_get_rbaln (VirtualLocation virt_loc, gpointer user_data, gboo
                 {
                     if (account == child->data)
                     {
-                        balance = gnc_numeric_add_fixed(balance, xaccSplitGetAmount(secondary));
+                        balance = gnc_numeric_add_fixed (balance, xaccSplitGetAmount (secondary));
                         break;
                     }
                 }
             }
             else
             {
-                if ( account == xaccSplitGetAccount(secondary) )
-                    balance = gnc_numeric_add_fixed( balance, xaccSplitGetAmount(secondary) );
+                if (account == xaccSplitGetAccount (secondary))
+                    balance = gnc_numeric_add_fixed (balance, xaccSplitGetAmount (secondary));
             }
         }
         virt_loc.vcell_loc.virt_row += i;
     }
 
     if (subaccounts)
-        g_list_free(children);
+        g_list_free (children);
 
     return balance;
 }
 
-static gnc_commodity *
-gnc_split_register_get_split_commodity (SplitRegister *reg,
+static gnc_commodity*
+gnc_split_register_get_split_commodity (SplitRegister* reg,
                                         VirtualLocation virt_loc)
 {
     CursorClass cursor_class;
-    Account *account;
-    Split *split;
+    Account* account;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (!split)
         return NULL;
 
     cursor_class = gnc_split_register_get_cursor_class (reg,
-                   virt_loc.vcell_loc);
+                                                        virt_loc.vcell_loc);
     if (cursor_class != CURSOR_CLASS_SPLIT)
         return NULL;
 
@@ -156,12 +159,13 @@ gnc_split_register_get_split_commodity (SplitRegister *reg,
 
     if (virt_cell_loc_equal (virt_loc.vcell_loc,
                              reg->table->current_cursor_loc.vcell_loc) &&
-            gnc_table_layout_get_cell_changed (reg->table->layout, XFRM_CELL, FALSE))
+        gnc_table_layout_get_cell_changed (reg->table->layout, XFRM_CELL, FALSE))
     {
-        const char *name;
+        const char* name;
 
         name = gnc_table_layout_get_cell_value (reg->table->layout, XFRM_CELL);
-        account = gnc_account_lookup_for_register (gnc_get_current_root_account (), name);
+        account = gnc_account_lookup_for_register (gnc_get_current_root_account(),
+                                                   name);
     }
 
     if (!account)
@@ -170,23 +174,23 @@ gnc_split_register_get_split_commodity (SplitRegister *reg,
     if (!account)
         return NULL;
 
-    return xaccAccountGetCommodity(account);
+    return xaccAccountGetCommodity (account);
 }
 
 static gboolean
-gnc_split_register_use_security_cells (SplitRegister *reg,
+gnc_split_register_use_security_cells (SplitRegister* reg,
                                        VirtualLocation virt_loc)
 {
     CursorClass cursor_class;
-    Account *account;
-    Split *split;
+    Account* account;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (!split)
         return TRUE;
 
     cursor_class = gnc_split_register_get_cursor_class (reg,
-                   virt_loc.vcell_loc);
+                                                        virt_loc.vcell_loc);
     if (cursor_class != CURSOR_CLASS_SPLIT)
         return TRUE;
 
@@ -194,12 +198,13 @@ gnc_split_register_use_security_cells (SplitRegister *reg,
 
     if (virt_cell_loc_equal (virt_loc.vcell_loc,
                              reg->table->current_cursor_loc.vcell_loc) &&
-            gnc_table_layout_get_cell_changed (reg->table->layout, XFRM_CELL, FALSE))
+        gnc_table_layout_get_cell_changed (reg->table->layout, XFRM_CELL, FALSE))
     {
-        const char *name;
+        const char* name;
 
         name = gnc_table_layout_get_cell_value (reg->table->layout, XFRM_CELL);
-        account = gnc_account_lookup_for_register (gnc_get_current_root_account (), name);
+        account = gnc_account_lookup_for_register (gnc_get_current_root_account(),
+                                                   name);
     }
 
     if (!account)
@@ -210,312 +215,313 @@ gnc_split_register_use_security_cells (SplitRegister *reg,
 
     if (xaccTransUseTradingAccounts (xaccSplitGetParent (split)))
     {
-        gnc_commodity *commod = xaccAccountGetCommodity(account);
-        if (!gnc_commodity_is_iso(commod) ||
-            !gnc_commodity_equal(commod, xaccTransGetCurrency(xaccSplitGetParent(split))))
+        gnc_commodity* commod = xaccAccountGetCommodity (account);
+        if (!gnc_commodity_is_iso (commod) ||
+            !gnc_commodity_equal (commod,
+                                  xaccTransGetCurrency (xaccSplitGetParent (split))))
             return TRUE;
     }
 
-    return xaccAccountIsPriced(account);
+    return xaccAccountIsPriced (account);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_date_label (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    return _("Date");
+    return _ ("Date");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_due_date_label (VirtualLocation virt_loc,
                                        gpointer user_data)
 {
-    return _("Due Date");
+    return _ ("Due Date");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_num_label (VirtualLocation virt_loc,
                                   gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
 
     switch (reg->type)
     {
     case RECEIVABLE_REGISTER:
     case PAYABLE_REGISTER:
         /* Column label for Invoice IDs in A/P & A/R accounts */
-        return _("Ref");
+        return _ ("Ref");
     default:
-        return _("Num");
+        return _ ("Num");
     }
 }
 
-static const char *
+static const char*
 gnc_split_register_get_tran_num_label (VirtualLocation virt_loc,
-                                  gpointer user_data)
+                                       gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
 
     switch (reg->type)
     {
     case RECEIVABLE_REGISTER:
     case PAYABLE_REGISTER:
-        return _("T-Ref");
+        return _ ("T-Ref");
     case GENERAL_JOURNAL:
     case INCOME_LEDGER:
     case SEARCH_LEDGER:
     {
         if (reg->use_tran_num_for_num_field)
-            return _("Num");
+            return _ ("Num");
     }
     default:
-        return _("T-Num");
+        return _ ("T-Num");
     }
 }
 
-static const char *
+static const char*
 gnc_split_register_get_desc_label (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
 
     switch (reg->type)
     {
     case RECEIVABLE_REGISTER:
-        return _("Customer");
+        return _ ("Customer");
     case PAYABLE_REGISTER:
-        return _("Vendor");
+        return _ ("Vendor");
     default:
-        return _("Description");
+        return _ ("Description");
     }
 }
 
-static const char *
+static const char*
 gnc_split_register_get_recn_label (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
 
     switch (reg->type)
     {
     case RECEIVABLE_REGISTER:
     case PAYABLE_REGISTER:
-        return _("Paid");
+        return _ ("Paid");
 
     default:
-        return _("Reconciled:R") + 11;
+        return C_ ("Column header for 'Reconciled'", "R");
     }
 }
 
-static const char *
+static const char*
 gnc_split_register_get_baln_label (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    return _("Balance");
+    return _ ("Balance");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_action_label (VirtualLocation virt_loc,
                                      gpointer user_data)
 {
-    return _("Action");
+    return _ ("Action");
 }
 
-static const char *
-gnc_split_register_get_associate_label (VirtualLocation virt_loc,
-                                   gpointer user_data)
+static const char*
+gnc_split_register_get_doclink_label (VirtualLocation virt_loc,
+                                      gpointer user_data)
 {
-    return _("Associate:A") + 10;
+    return C_ ("Column header for 'Document Link'", "L");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_xfrm_label (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    return _("Account");
+    return _ ("Account");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_mxfrm_label (VirtualLocation virt_loc,
                                     gpointer user_data)
 {
-    return _("Transfer");
+    return _ ("Transfer");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_memo_label (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    return _("Memo");
+    return _ ("Memo");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_type_label (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    return _("Type");
+    return _ ("Type");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_rate_label (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    return _("Rate");
+    return _ ("Rate");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_debit_label (VirtualLocation virt_loc,
                                     gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
 
     return gnc_split_register_get_debit_string (reg);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_credit_label (VirtualLocation virt_loc,
                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
 
     return gnc_split_register_get_credit_string (reg);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_price_label (VirtualLocation virt_loc,
                                     gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    gnc_commodity *commod;
+    SplitRegister* reg = user_data;
+    gnc_commodity* commod;
 
     if (!gnc_split_register_use_security_cells (reg, virt_loc))
         return NULL;
 
     commod = gnc_split_register_get_split_commodity (reg, virt_loc);
-    if (!commod || !gnc_commodity_is_iso(commod))
-        return _("Price");
+    if (!commod || !gnc_commodity_is_iso (commod))
+        return _ ("Price");
     else
-        return _("Exch. Rate");
+        return _ ("Exch. Rate");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_shares_label (VirtualLocation virt_loc,
                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    gnc_commodity *commod;
+    SplitRegister* reg = user_data;
+    gnc_commodity* commod;
 
     if (!gnc_split_register_use_security_cells (reg, virt_loc))
         return NULL;
 
     commod = gnc_split_register_get_split_commodity (reg, virt_loc);
-    if (!commod || !gnc_commodity_is_iso(commod))
-        return _("Shares");
+    if (!commod || !gnc_commodity_is_iso (commod))
+        return _ ("Shares");
     else
-        return _("Oth. Curr.");
+        return _ ("Oth. Curr.");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_tcredit_label (VirtualLocation virt_loc,
                                       gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    SRInfo *info = gnc_split_register_get_info (reg);
+    SplitRegister* reg = user_data;
+    SRInfo* info = gnc_split_register_get_info (reg);
 
     if (info->tcredit_str)
         return info->tcredit_str;
 
     {
-        const char *string = gnc_split_register_get_credit_string (reg);
+        const char* string = gnc_split_register_get_credit_string (reg);
 
         if (string)
-            info->tcredit_str = g_strdup_printf (_("Tot %s"), string);
+            info->tcredit_str = g_strdup_printf (_ ("Tot %s"), string);
     }
 
     if (info->tcredit_str)
         return info->tcredit_str;
 
-    info->tcredit_str = g_strdup (_("Tot Credit"));
+    info->tcredit_str = g_strdup (_ ("Tot Credit"));
 
     return info->tcredit_str;
 }
 
-static const char *
+static const char*
 gnc_split_register_get_tdebit_label (VirtualLocation virt_loc,
                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    SRInfo *info = gnc_split_register_get_info (reg);
+    SplitRegister* reg = user_data;
+    SRInfo* info = gnc_split_register_get_info (reg);
 
     if (info->tdebit_str)
         return info->tdebit_str;
 
     {
-        const char *string = gnc_split_register_get_debit_string (reg);
+        const char* string = gnc_split_register_get_debit_string (reg);
         if (string)
-            info->tdebit_str = g_strdup_printf (_("Tot %s"), string);
+            info->tdebit_str = g_strdup_printf (_ ("Tot %s"), string);
     }
 
     if (info->tdebit_str)
         return info->tdebit_str;
 
-    info->tdebit_str = g_strdup (_("Tot Debit"));
+    info->tdebit_str = g_strdup (_ ("Tot Debit"));
 
     return info->tdebit_str;
 }
 
-static const char *
+static const char*
 gnc_split_register_get_tshares_label (VirtualLocation virt_loc,
                                       gpointer user_data)
 {
-    return _("Tot Shares");
+    return _ ("Tot Shares");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_tbalance_label (VirtualLocation virt_loc,
                                        gpointer user_data)
 {
-    return _("Balance");
+    return _ ("Balance");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_notes_label (VirtualLocation virt_loc,
                                     gpointer user_data)
 {
-    return _("Notes");
+    return _ ("Notes");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_fdebit_label (VirtualLocation virt_loc,
                                      gpointer user_data)
 {
-    return _("Debit Formula");
+    return _ ("Debit Formula");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_fcredit_label (VirtualLocation virt_loc,
                                       gpointer user_data)
 {
-    return _("Credit Formula");
+    return _ ("Credit Formula");
 }
 
 
-static char *
+static char*
 gnc_split_register_get_default_tooltip (VirtualLocation virt_loc,
-                                     gpointer user_data)
+                                        gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *tooltip = gnc_table_get_entry(reg->table, virt_loc);
+    SplitRegister* reg = user_data;
+    const char* tooltip = gnc_table_get_entry (reg->table, virt_loc);
 
     return g_strdup (tooltip);
 }
 
-static char *
+static char*
 gnc_split_register_get_recn_tooltip (VirtualLocation virt_loc,
                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (!split)
@@ -525,102 +531,66 @@ gnc_split_register_get_recn_tooltip (VirtualLocation virt_loc,
     {
         char datebuff[MAX_DATE_LENGTH + 1];
         time64 time = xaccSplitGetDateReconciled (split);
-        memset (datebuff, 0, sizeof(datebuff));
-        qof_print_date_buff (datebuff, sizeof(datebuff), time);
-        return g_strdup_printf (_("Reconciled on %s"), datebuff);
+        memset (datebuff, 0, sizeof (datebuff));
+        qof_print_date_buff (datebuff, MAX_DATE_LENGTH, time);
+        return g_strdup_printf (_ ("Reconciled on %s"), datebuff);
     }
     else if (xaccSplitGetReconcile (split) == VREC)
     {
-        Transaction *trans = xaccSplitGetParent (split);
+        Transaction* trans = xaccSplitGetParent (split);
         return g_strdup (xaccTransGetVoidReason (trans));
     }
     else
         return NULL;
 }
 
-static char *
-gnc_split_register_get_associate_tooltip (VirtualLocation virt_loc,
-                                          gpointer user_data)
+static char*
+gnc_split_register_get_doclink_tooltip (VirtualLocation virt_loc,
+                                        gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Transaction *trans;
-    const char *uri;
+    SplitRegister* reg = user_data;
+    Transaction* trans;
+    const char* uri;
 
     trans = gnc_split_register_get_trans (reg, virt_loc.vcell_loc);
     if (!trans)
         return NULL;
 
     // get the existing uri
-    uri = xaccTransGetAssociation (trans);
+    uri = xaccTransGetDocLink (trans);
 
     // Check for uri is empty or NULL
-    if (uri && *uri != '\0')
-    {
-        gchar *scheme = gnc_uri_get_scheme (uri);
-        gchar *file_path = NULL;
-
-        if (!scheme) // relative path
-        {
-            gchar *path_head = gnc_prefs_get_string (GNC_PREFS_GROUP_GENERAL, "assoc-head");
-
-            if (path_head && *path_head != '\0') // not default entry
-                file_path = gnc_file_path_absolute (gnc_uri_get_path (path_head), uri);
-            else
-                file_path = gnc_file_path_absolute (NULL, uri);
-
-            g_free (path_head);
-        }
-
-        if (gnc_uri_is_file_scheme (scheme)) // absolute path
-            file_path = gnc_uri_get_path (uri);
-
-#ifdef G_OS_WIN32 // make path look like a traditional windows path
-        if (file_path)
-            file_path = g_strdelimit (file_path, "/", '\\');
-#endif
-
-        g_free (scheme);
-
-        if (!file_path)
-            return g_uri_unescape_string (uri, NULL);
-        else
-        {
-            gchar *file_uri_u = g_uri_unescape_string (file_path, NULL);
-            const gchar *filename = gnc_uri_get_path (file_uri_u);
-            g_free (file_uri_u);
-            g_free (file_path);
-            return g_strdup (filename);
-        }
-    }
+    if (uri && *uri)
+        return gnc_doclink_get_unescaped_just_uri (uri);
     else
         return NULL;
 }
 
 static gnc_numeric
-get_trans_total_amount (SplitRegister *reg, Transaction *trans)
+get_trans_total_amount (SplitRegister* reg, Transaction* trans)
 {
-    Account *account = gnc_split_register_get_default_account (reg);
-    return xaccTransGetAccountAmount(trans, account);
+    Account* account = gnc_split_register_get_default_account (reg);
+    return xaccTransGetAccountAmount (trans, account);
 }
 
 static gnc_numeric
-get_trans_total_balance (SplitRegister *reg, Transaction *trans)
+get_trans_total_balance (SplitRegister* reg, Transaction* trans)
 {
-    Account *account;
+    Account* account;
 
     account = gnc_split_register_get_default_account (reg);
     if (!trans || !account) return gnc_numeric_zero();
 
-    return xaccTransGetAccountBalance(trans, account);
+    return xaccTransGetAccountBalance (trans, account);
 }
 
 static gboolean
 gnc_split_register_use_negative_color (VirtualLocation virt_loc,
-                                       SplitRegister *reg)
+                                       SplitRegister* reg)
 {
-    const char * cell_name;
+    const char* cell_name;
     gnc_numeric value = gnc_numeric_zero();
-    Split *split;
+    Split* split;
 
     if (!use_red_for_negative)
         return FALSE;
@@ -636,10 +606,10 @@ gnc_split_register_use_negative_color (VirtualLocation virt_loc,
     else if (gnc_cell_name_equal (cell_name, SHRS_CELL))
     {
         if (virt_cell_loc_equal (reg->table->current_cursor_loc.vcell_loc,
-                                      virt_loc.vcell_loc))
+                                 virt_loc.vcell_loc))
             value = gnc_price_cell_get_value
-                     ((PriceCell *) gnc_table_layout_get_cell (reg->table->layout,
-                             SHRS_CELL));
+                    ((PriceCell*) gnc_table_layout_get_cell (reg->table->layout,
+                                                             SHRS_CELL));
         else
             value = xaccSplitGetAmount (split);
     }
@@ -651,13 +621,13 @@ gnc_split_register_use_negative_color (VirtualLocation virt_loc,
         value = get_trans_total_balance (reg, xaccSplitGetParent (split));
 
     if ((gnc_cell_name_equal (cell_name, BALN_CELL)) ||
-            (gnc_cell_name_equal (cell_name, RBALN_CELL)) ||
-            (gnc_cell_name_equal (cell_name, TBALN_CELL)))
-        {
-            Account *account = xaccSplitGetAccount (split);
-            if (gnc_reverse_balance (account))
-                value = gnc_numeric_neg (value);
-        }
+        (gnc_cell_name_equal (cell_name, RBALN_CELL)) ||
+        (gnc_cell_name_equal (cell_name, TBALN_CELL)))
+    {
+        Account* account = xaccSplitGetAccount (split);
+        if (gnc_reverse_balance (account))
+            value = gnc_numeric_neg (value);
+    }
 
     if (gnc_numeric_negative_p (value))
         return TRUE;
@@ -667,14 +637,14 @@ gnc_split_register_use_negative_color (VirtualLocation virt_loc,
 
 static guint32
 gnc_split_register_get_cell_color_internal (VirtualLocation virt_loc,
-                                            SplitRegister *reg)
+                                            SplitRegister* reg)
 {
-    const char *cursor_name;
-    VirtualCell *vcell;
+    const char* cursor_name;
+    VirtualCell* vcell;
     gboolean is_current;
     guint32 colorbase = 0;
 
-     /* a bit of enum arithmetic */
+    /* a bit of enum arithmetic */
 
     if (gnc_split_register_use_negative_color (virt_loc, reg))
         colorbase = COLOR_NEGATIVE; // Requires Negative fg color
@@ -690,7 +660,7 @@ gnc_split_register_get_cell_color_internal (VirtualLocation virt_loc,
         return (colorbase + COLOR_UNDEFINED);
 
     if ((virt_loc.phys_col_offset < vcell->cellblock->start_col) ||
-            (virt_loc.phys_col_offset > vcell->cellblock->stop_col))
+        (virt_loc.phys_col_offset > vcell->cellblock->stop_col))
         return (colorbase + COLOR_UNDEFINED);
 
     is_current = virt_cell_loc_equal (reg->table->current_cursor_loc.vcell_loc,
@@ -699,42 +669,42 @@ gnc_split_register_get_cell_color_internal (VirtualLocation virt_loc,
     cursor_name = vcell->cellblock->cursor_name;
 
     if (g_strcmp0 (cursor_name, CURSOR_SINGLE_JOURNAL) == 0 ||
-            g_strcmp0 (cursor_name, CURSOR_SINGLE_LEDGER) == 0)
+        g_strcmp0 (cursor_name, CURSOR_SINGLE_LEDGER) == 0)
     {
         if (is_current)
             return vcell->start_primary_color ?
-                    (colorbase + COLOR_PRIMARY_ACTIVE) :
-                    (colorbase + COLOR_SECONDARY_ACTIVE);
+                   (colorbase + COLOR_PRIMARY_ACTIVE) :
+                   (colorbase + COLOR_SECONDARY_ACTIVE);
 
         return vcell->start_primary_color ?
-                (colorbase + COLOR_PRIMARY) : (colorbase + COLOR_SECONDARY);
+               (colorbase + COLOR_PRIMARY) : (colorbase + COLOR_SECONDARY);
     }
 
     if (g_strcmp0 (cursor_name, CURSOR_DOUBLE_JOURNAL) == 0 ||
-            g_strcmp0 (cursor_name, CURSOR_DOUBLE_JOURNAL_NUM_ACTN) == 0 ||
-            g_strcmp0 (cursor_name, CURSOR_DOUBLE_LEDGER) == 0 ||
-            g_strcmp0 (cursor_name, CURSOR_DOUBLE_LEDGER_NUM_ACTN) == 0)
+        g_strcmp0 (cursor_name, CURSOR_DOUBLE_JOURNAL_NUM_ACTN) == 0 ||
+        g_strcmp0 (cursor_name, CURSOR_DOUBLE_LEDGER) == 0 ||
+        g_strcmp0 (cursor_name, CURSOR_DOUBLE_LEDGER_NUM_ACTN) == 0)
     {
         if (is_current)
         {
             if (reg->double_alt_color)
                 return vcell->start_primary_color ?
-                        (colorbase + COLOR_PRIMARY_ACTIVE) :
-                        (colorbase + COLOR_SECONDARY_ACTIVE);
+                       (colorbase + COLOR_PRIMARY_ACTIVE) :
+                       (colorbase + COLOR_SECONDARY_ACTIVE);
 
             return (virt_loc.phys_row_offset % 2 == 0) ?
-                    (colorbase + COLOR_PRIMARY_ACTIVE) :
-                    (colorbase + COLOR_SECONDARY_ACTIVE);
+                   (colorbase + COLOR_PRIMARY_ACTIVE) :
+                   (colorbase + COLOR_SECONDARY_ACTIVE);
         }
 
         if (reg->double_alt_color)
             return vcell->start_primary_color ?
-                    (colorbase + COLOR_PRIMARY) :
-                    (colorbase + COLOR_SECONDARY);
+                   (colorbase + COLOR_PRIMARY) :
+                   (colorbase + COLOR_SECONDARY);
 
         return (virt_loc.phys_row_offset % 2 == 0) ?
-                (colorbase + COLOR_PRIMARY) :
-                (colorbase + COLOR_SECONDARY);
+               (colorbase + COLOR_PRIMARY) :
+               (colorbase + COLOR_SECONDARY);
     }
 
     if (g_strcmp0 (cursor_name, CURSOR_SPLIT) == 0)
@@ -753,10 +723,10 @@ gnc_split_register_get_cell_color_internal (VirtualLocation virt_loc,
 // Get Color for non numeric cells, no hatching required
 static guint32
 gnc_split_register_get_cell_color (VirtualLocation virt_loc,
-        gboolean *hatching,
-        gpointer user_data)
+                                   gboolean* hatching,
+                                   gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
 
     if (hatching)
         *hatching = FALSE;
@@ -767,14 +737,14 @@ gnc_split_register_get_cell_color (VirtualLocation virt_loc,
 // Get Color for numeric cells, update hatching
 static guint32
 gnc_split_register_get_debcred_color (VirtualLocation virt_loc,
-        gboolean *hatching,
-        gpointer user_data)
+                                      gboolean* hatching,
+                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
 
     if (hatching)
     {
-        Transaction *trans;
+        Transaction* trans;
 
         trans = gnc_split_register_get_trans (reg, virt_loc.vcell_loc);
 
@@ -788,19 +758,19 @@ gnc_split_register_get_debcred_color (VirtualLocation virt_loc,
 
 static void
 gnc_split_register_get_border (VirtualLocation virt_loc,
-                               PhysicalCellBorders *borders,
+                               PhysicalCellBorders* borders,
                                gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
     CursorClass cursor_class;
-    VirtualCell *vcell;
+    VirtualCell* vcell;
 
     vcell = gnc_table_get_virtual_cell (reg->table, virt_loc.vcell_loc);
     if (!vcell || !vcell->cellblock)
         return;
 
     if (virt_loc.phys_col_offset < vcell->cellblock->start_col ||
-            virt_loc.phys_col_offset > vcell->cellblock->stop_col)
+        virt_loc.phys_col_offset > vcell->cellblock->stop_col)
     {
         borders->top    = CELL_BORDER_LINE_NONE;
         borders->bottom = CELL_BORDER_LINE_NONE;
@@ -826,70 +796,92 @@ gnc_split_register_get_border (VirtualLocation virt_loc,
     }
 }
 
-static const char *
-gnc_split_register_get_associate_entry (VirtualLocation virt_loc,
-                                   gboolean translate,
-                                   gboolean *conditionally_changed,
-                                   gpointer user_data)
+static const char*
+gnc_split_register_get_doclink_entry (VirtualLocation virt_loc,
+                                      gboolean translate,
+                                      gboolean* conditionally_changed,
+                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Transaction *trans;
-    char associate;
-    static char s[2];
-    const char *uri;
+    SplitRegister* reg = user_data;
+    Transaction* trans;
+    char link_flag;
+    const char* uri;
+    Doclinkcell *cell;
+
+    cell = (Doclinkcell *)gnc_table_layout_get_cell (reg->table->layout, DOCLINK_CELL);
+
+    if (!cell)
+        return NULL;
 
     trans = gnc_split_register_get_trans (reg, virt_loc.vcell_loc);
     if (!trans)
         return NULL;
 
     // get the existing uri
-    uri = xaccTransGetAssociation (trans);
+    uri = xaccTransGetDocLink (trans);
 
     // Check for uri is empty or NULL
-    if (uri && g_strcmp0 (uri, "") != 0)
+    if (uri && *uri)
     {
-        gchar *scheme = gnc_uri_get_scheme (uri);
+        gchar* scheme = gnc_uri_get_scheme (uri);
 
         if (!scheme || g_strcmp0 (scheme, "file") == 0)
-            associate = 'f';
+            link_flag = FLINK;
         else
-            associate = 'w';
+            link_flag = WLINK;
 
         g_free (scheme);
     }
     else
-        associate = ' ';
+        link_flag = ' ';
 
-    s[0] = associate;
-    s[1] = '\0';
+    if (gnc_doclink_get_use_glyphs (cell))
+        return gnc_doclink_get_glyph_from_flag (link_flag);
 
-    return s;
+    if (translate)
+        return gnc_get_doclink_str (link_flag);
+    else
+    {
+        static char s[2];
+
+        s[0] = link_flag;
+        s[1] = '\0';
+        return s;
+    }
+}
+
+static char *
+gnc_split_register_get_doclink_help (VirtualLocation virt_loc,
+                                     gpointer user_data)
+{
+    // do not want contents displayed as help so return space
+    return g_strdup (" ");
 }
 
 #if 0
 // this code is not used yet
 static char
-gnc_split_register_get_associate_value (SplitRegister *reg,
-                                   VirtualLocation virt_loc)
+gnc_split_register_get_doclink_value (SplitRegister* reg,
+                                      VirtualLocation virt_loc)
 {
-    RecnCell *cell;
+    Doclinkcell *cell;
 
-    cell = (RecnCell *)gnc_table_layout_get_cell (reg->table->layout, ASSOC_CELL);
+    cell = (Doclinkcell *)gnc_table_layout_get_cell (reg->table->layout, DOCLINK_CELL);
     if (!cell)
         return '\0';
 
-    return gnc_recn_cell_get_flag (cell);
+    return gnc_doclink_cell_get_flag (cell);
 }
 #endif
 
-static const char *
+static const char*
 gnc_split_register_get_type_entry (VirtualLocation virt_loc,
                                    gboolean translate,
-                                   gboolean *conditionally_changed,
+                                   gboolean* conditionally_changed,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Transaction *trans;
+    SplitRegister* reg = user_data;
+    Transaction* trans;
     char type;
     static char s[2];
 
@@ -909,27 +901,27 @@ gnc_split_register_get_type_entry (VirtualLocation virt_loc,
 }
 
 static char
-gnc_split_register_get_type_value (SplitRegister *reg,
+gnc_split_register_get_type_value (SplitRegister* reg,
                                    VirtualLocation virt_loc)
 {
-    RecnCell *cell;
+    RecnCell* cell;
 
-    cell = (RecnCell *)gnc_table_layout_get_cell (reg->table->layout, TYPE_CELL);
+    cell = (RecnCell*)gnc_table_layout_get_cell (reg->table->layout, TYPE_CELL);
     if (!cell)
         return '\0';
 
     return gnc_recn_cell_get_flag (cell);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_due_date_entry (VirtualLocation virt_loc,
                                        gboolean translate,
-                                       gboolean *conditionally_changed,
+                                       gboolean* conditionally_changed,
                                        gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Transaction *trans;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Transaction* trans;
+    Split* split;
     gboolean is_current;
     char type;
 
@@ -942,7 +934,7 @@ gnc_split_register_get_due_date_entry (VirtualLocation virt_loc,
     }
     else
     {
-        const char *typestr =
+        const char* typestr =
             gnc_split_register_get_type_entry (virt_loc, translate,
                                                conditionally_changed, user_data);
         if (typestr != NULL)
@@ -971,15 +963,15 @@ gnc_split_register_get_due_date_entry (VirtualLocation virt_loc,
     return qof_print_date (xaccTransRetDateDue (trans));
 }
 
-static const char *
+static const char*
 gnc_split_register_get_date_entry (VirtualLocation virt_loc,
                                    gboolean translate,
-                                   gboolean *conditionally_changed,
+                                   gboolean* conditionally_changed,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Transaction *trans;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Transaction* trans;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     trans = xaccSplitGetParent (split);
@@ -988,46 +980,48 @@ gnc_split_register_get_date_entry (VirtualLocation virt_loc,
     return qof_print_date (xaccTransRetDatePosted (trans));
 }
 
-static char *
+static char*
 gnc_split_register_get_date_help (VirtualLocation virt_loc,
                                   gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    BasicCell *cell;
-    const char *date_string;
+    SplitRegister* reg = user_data;
+    BasicCell* cell;
+    const char* date_string;
     time64 cell_time;
 
     cell = gnc_table_get_cell (reg->table, virt_loc);
     if (!cell || !cell->value || *cell->value == '\0')
         return NULL;
 
-    gnc_date_cell_get_date ((DateCell *) cell, &cell_time, FALSE);
+    gnc_date_cell_get_date ((DateCell*) cell, &cell_time, FALSE);
 
-    date_string = gnc_print_time64 (cell_time, _("%A %d %B %Y"));
+    /* Translators: This is a date format, see i.e.
+       https://www.gnu.org/software/libc/manual/html_node/Formatting-Calendar-Time.html */
+    date_string = gnc_print_time64 (cell_time, _ ("%A %d %B %Y"));
 
     return g_strdup (date_string);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_inactive_date_entry (VirtualLocation virt_loc,
-        gboolean translate,
-        gboolean *conditionally_changed,
-        gpointer user_data)
+                                            gboolean translate,
+                                            gboolean* conditionally_changed,
+                                            gpointer user_data)
 {
     /* This seems to be the one that initially gets used, the InactiveDateCell
        is set to, and subsequently displayed. */
-    return _("Scheduled");
+    return _ ("Scheduled");
 }
 
-static const char *
+static const char*
 gnc_split_register_get_num_entry (VirtualLocation virt_loc,
                                   gboolean translate,
-                                  gboolean *conditionally_changed,
+                                  gboolean* conditionally_changed,
                                   gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Transaction *trans;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Transaction* trans;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     trans = xaccSplitGetParent (split);
@@ -1035,15 +1029,15 @@ gnc_split_register_get_num_entry (VirtualLocation virt_loc,
     return gnc_get_num_action (trans, split);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_tran_num_entry (VirtualLocation virt_loc,
-                                  gboolean translate,
-                                  gboolean *conditionally_changed,
-                                  gpointer user_data)
+                                       gboolean translate,
+                                       gboolean* conditionally_changed,
+                                       gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Transaction *trans;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Transaction* trans;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     trans = xaccSplitGetParent (split);
@@ -1051,12 +1045,12 @@ gnc_split_register_get_tran_num_entry (VirtualLocation virt_loc,
     return gnc_get_num_action (trans, NULL);
 }
 
-static char *
+static char*
 gnc_split_register_get_num_help (VirtualLocation virt_loc,
                                  gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
@@ -1065,29 +1059,29 @@ gnc_split_register_get_num_help (VirtualLocation virt_loc,
         case RECEIVABLE_REGISTER:
         case PAYABLE_REGISTER:
             help = reg->use_tran_num_for_num_field ?
-                    _("Enter a reference, such as an invoice or check number, "
-                        "common to all entry lines (splits)") :
-                    _("Enter a reference, such as an invoice or check number, "
-                        "unique to each entry line (split)");
+                   _ ("Enter a reference, such as an invoice or check number, "
+                      "common to all entry lines (splits)") :
+                   _ ("Enter a reference, such as an invoice or check number, "
+                      "unique to each entry line (split)");
             break;
         default:
             help = reg->use_tran_num_for_num_field ?
-                    _("Enter a reference, such as a check number, "
-                        "common to all entry lines (splits)") :
-                    _("Enter a reference, such as a check number, "
-                        "unique to each entry line (split)");
+                   _ ("Enter a reference, such as a check number, "
+                      "common to all entry lines (splits)") :
+                   _ ("Enter a reference, such as a check number, "
+                      "unique to each entry line (split)");
             break;
         }
 
     return g_strdup (help);
 }
 
-static char *
+static char*
 gnc_split_register_get_tran_num_help (VirtualLocation virt_loc,
-                                 gpointer user_data)
+                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
@@ -1095,27 +1089,27 @@ gnc_split_register_get_tran_num_help (VirtualLocation virt_loc,
         {
         case RECEIVABLE_REGISTER:
         case PAYABLE_REGISTER:
-            help = _("Enter a transaction reference, such as an invoice "
-                    "or check number, common to all entry lines (splits)");
+            help = _ ("Enter a transaction reference, such as an invoice "
+                      "or check number, common to all entry lines (splits)");
             break;
         default:
-            help = _("Enter a transaction reference "
-                    "that will be common to all entry lines (splits)");
+            help = _ ("Enter a transaction reference "
+                      "that will be common to all entry lines (splits)");
             break;
         }
 
     return g_strdup (help);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_desc_entry (VirtualLocation virt_loc,
                                    gboolean translate,
-                                   gboolean *conditionally_changed,
+                                   gboolean* conditionally_changed,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Transaction *trans;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Transaction* trans;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     trans = xaccSplitGetParent (split);
@@ -1123,39 +1117,39 @@ gnc_split_register_get_desc_entry (VirtualLocation virt_loc,
     return xaccTransGetDescription (trans);
 }
 
-static char *
+static char*
 gnc_split_register_get_desc_help (VirtualLocation virt_loc,
                                   gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
         switch (reg->type)
         {
         case RECEIVABLE_REGISTER:
-            help = _("Enter the name of the Customer");
+            help = _ ("Enter the name of the Customer");
             break;
         case PAYABLE_REGISTER:
-            help = _("Enter the name of the Vendor");
+            help = _ ("Enter the name of the Vendor");
             break;
         default:
-            help = _("Enter a description of the transaction");
+            help = _ ("Enter a description of the transaction");
             break;
         }
     return g_strdup (help);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_notes_entry (VirtualLocation virt_loc,
                                     gboolean translate,
-                                    gboolean *conditionally_changed,
+                                    gboolean* conditionally_changed,
                                     gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Transaction *trans;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Transaction* trans;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     trans = xaccSplitGetParent (split);
@@ -1163,65 +1157,65 @@ gnc_split_register_get_notes_entry (VirtualLocation virt_loc,
     return xaccTransGetNotes (trans);
 }
 
-static char *
+static char*
 gnc_split_register_get_notes_help (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
-        help = _("Enter notes for the transaction");
+        help = _ ("Enter notes for the transaction");
 
     return g_strdup (help);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_vnotes_entry (VirtualLocation virt_loc,
                                      gboolean translate,
-                                     gboolean *conditionally_changed,
+                                     gboolean* conditionally_changed,
                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Transaction *trans;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Transaction* trans;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     trans = xaccSplitGetParent (split);
 
-    if(trans == NULL)
+    if (trans == NULL)
         return NULL;
     else
-        return xaccTransGetVoidReason(trans);
+        return xaccTransGetVoidReason (trans);
 }
 
-static char *
+static char*
 gnc_split_register_get_vnotes_help (VirtualLocation virt_loc,
                                     gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
-        help = _("Reason the transaction was voided");
+        help = _ ("Reason the transaction was voided");
 
     return g_strdup (help);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_rate_entry (VirtualLocation virt_loc,
                                    gboolean translate,
-                                   gboolean *conditionally_changed,
+                                   gboolean* conditionally_changed,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Split *split, *osplit;
-    Transaction *txn;
+    SplitRegister* reg = user_data;
+    Split* split, *osplit;
+    Transaction* txn;
     gnc_numeric amount, value, convrate;
-    gnc_commodity *curr;
-    SRInfo *info = gnc_split_register_get_info (reg);
+    gnc_commodity* curr;
+    SRInfo* info = gnc_split_register_get_info (reg);
 
     if (info->rate_reset == RATE_RESET_REQD && info->auto_complete)
         return "0";
@@ -1238,8 +1232,8 @@ gnc_split_register_get_rate_entry (VirtualLocation virt_loc,
     txn = gnc_split_register_get_trans (reg, virt_loc.vcell_loc);
     curr = xaccTransGetCurrency (xaccSplitGetParent (split));
     if (!gnc_split_register_current_trans_expanded (reg) && osplit &&
-            !gnc_split_register_needs_conv_rate(reg, txn,
-                    xaccSplitGetAccount(split)))
+        !gnc_split_register_needs_conv_rate (reg, txn,
+                                             xaccSplitGetAccount (split)))
     {
         split = osplit;
     }
@@ -1250,19 +1244,20 @@ gnc_split_register_get_rate_entry (VirtualLocation virt_loc,
     if (gnc_numeric_zero_p (value))
         return "0";
 
-    convrate = gnc_numeric_div (amount, value, GNC_DENOM_AUTO, GNC_HOW_DENOM_REDUCE);
+    convrate = gnc_numeric_div (amount, value, GNC_DENOM_AUTO,
+                                GNC_HOW_DENOM_REDUCE);
 
     return xaccPrintAmount (convrate, gnc_default_price_print_info (curr));
 }
 
-static const char *
+static const char*
 gnc_split_register_get_recn_entry (VirtualLocation virt_loc,
                                    gboolean translate,
-                                   gboolean *conditionally_changed,
+                                   gboolean* conditionally_changed,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (!split)
@@ -1281,78 +1276,77 @@ gnc_split_register_get_recn_entry (VirtualLocation virt_loc,
     }
 }
 
-static const char *
+static const char*
 gnc_split_register_get_action_entry (VirtualLocation virt_loc,
                                      gboolean translate,
-                                     gboolean *conditionally_changed,
+                                     gboolean* conditionally_changed,
                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Split *split = gnc_split_register_get_split(reg, virt_loc.vcell_loc);
+    SplitRegister* reg = user_data;
+    Split* split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
 
     return gnc_get_num_action (NULL, split);
 }
 
-static char *
+static char*
 gnc_split_register_get_action_help (VirtualLocation virt_loc,
                                     gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
         help = reg->use_tran_num_for_num_field ?
-        _("Enter an action type, or choose one from the list") :
-        _("Enter a reference number, such as the next check number, or choose an action type from the list");
+               _ ("Enter an action type, or choose one from the list") :
+               _ ("Enter a reference number, such as the next check number, or choose an action type from the list");
 
     return g_strdup (help);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_memo_entry (VirtualLocation virt_loc,
                                    gboolean translate,
-                                   gboolean *conditionally_changed,
+                                   gboolean* conditionally_changed,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
 
     return xaccSplitGetMemo (split);
 }
 
-static char *
+static char*
 gnc_split_register_get_memo_help (VirtualLocation virt_loc,
                                   gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
-        help = _("Enter a description of the split");
+        help = _ ("Enter a description of the split");
     return g_strdup (help);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_balance_entry (VirtualLocation virt_loc,
                                       gboolean translate,
-                                      gboolean *conditionally_changed,
+                                      gboolean* conditionally_changed,
                                       gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    SRInfo *info = gnc_split_register_get_info (reg);
+    SplitRegister* reg = user_data;
+    SRInfo* info = gnc_split_register_get_info (reg);
     gnc_numeric balance;
     gboolean is_trans;
-    Split *split;
-    Account *account;
+    Split* split;
+    Account* account;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
-
     if (split == xaccSplitLookup (&info->blank_split_guid,
-                                  gnc_get_current_book ()))
+                                  gnc_get_current_book()))
         return NULL;
 
     is_trans = gnc_cell_name_equal
@@ -1370,19 +1364,20 @@ gnc_split_register_get_balance_entry (VirtualLocation virt_loc,
     if (gnc_reverse_balance (account))
         balance = gnc_numeric_neg (balance);
 
-    return xaccPrintAmount (balance, gnc_account_print_info (account, FALSE));
+    return xaccPrintAmount (balance, gnc_account_print_info (account,
+                                                             reg->mismatched_commodities));
 }
 
-static const char *
+static const char*
 gnc_split_register_get_price_entry (VirtualLocation virt_loc,
                                     gboolean translate,
-                                    gboolean *conditionally_changed,
+                                    gboolean* conditionally_changed,
                                     gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
     gnc_numeric price;
-    gnc_commodity *curr;
-    Split *split;
+    gnc_commodity* curr;
+    Split* split;
 
     if (!gnc_split_register_use_security_cells (reg, virt_loc))
         return NULL;
@@ -1397,29 +1392,29 @@ gnc_split_register_get_price_entry (VirtualLocation virt_loc,
     return xaccPrintAmount (price, gnc_default_price_print_info (curr));
 }
 
-static char *
+static char*
 gnc_split_register_get_price_help (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
-        help = _("Enter the effective share price");
+        help = _ ("Enter the effective share price");
 
     return g_strdup (help);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_shares_entry (VirtualLocation virt_loc,
                                      gboolean translate,
-                                     gboolean *conditionally_changed,
+                                     gboolean* conditionally_changed,
                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
     gnc_numeric shares;
-    Split *split;
+    Split* split;
 
     if (!gnc_split_register_use_security_cells (reg, virt_loc))
         return NULL;
@@ -1433,29 +1428,29 @@ gnc_split_register_get_shares_entry (VirtualLocation virt_loc,
     return xaccPrintAmount (shares, gnc_split_amount_print_info (split, FALSE));
 }
 
-static char *
+static char*
 gnc_split_register_get_shares_help (VirtualLocation virt_loc,
                                     gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
-        help = _("Enter the number of shares bought or sold");
+        help = _ ("Enter the number of shares bought or sold");
 
     return g_strdup (help);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_tshares_entry (VirtualLocation virt_loc,
                                       gboolean translate,
-                                      gboolean *conditionally_changed,
+                                      gboolean* conditionally_changed,
                                       gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
     gnc_numeric total;
-    Split *split;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
 
@@ -1464,53 +1459,53 @@ gnc_split_register_get_tshares_entry (VirtualLocation virt_loc,
     return xaccPrintAmount (total, gnc_split_amount_print_info (split, FALSE));
 }
 
-static const char *
+static const char*
 gnc_split_register_get_xfrm_entry (VirtualLocation virt_loc,
                                    gboolean translate,
-                                   gboolean *conditionally_changed,
+                                   gboolean* conditionally_changed,
                                    gpointer user_data)
 {
-    static char *name = NULL;
+    static char* name = NULL;
 
-    SplitRegister *reg = user_data;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
 
     g_free (name);
 
     name = gnc_get_account_name_for_split_register (xaccSplitGetAccount (split),
-               reg->show_leaf_accounts);
+                                                    reg->show_leaf_accounts);
 
     return name;
 }
 
-static char *
+static char*
 gnc_split_register_get_xfrm_help (VirtualLocation virt_loc,
                                   gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
-        help = _("Enter the account to transfer from, "
-                 "or choose one from the list");
+        help = _ ("Enter the account to transfer from, "
+                  "or choose one from the list");
 
     return g_strdup (help);
 }
 
-static const char *
+static const char*
 gnc_split_register_get_mxfrm_entry (VirtualLocation virt_loc,
                                     gboolean translate,
-                                    gboolean *conditionally_changed,
+                                    gboolean* conditionally_changed,
                                     gpointer user_data)
 {
-    static char *name = NULL;
+    static char* name = NULL;
 
-    SplitRegister *reg = user_data;
-    Split *split;
-    Split *s;
+    SplitRegister* reg = user_data;
+    Split* split;
+    Split* s;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (!split)
@@ -1522,12 +1517,12 @@ gnc_split_register_get_mxfrm_entry (VirtualLocation virt_loc,
 
     if (s)
         name = gnc_get_account_name_for_split_register (xaccSplitGetAccount (s),
-                   reg->show_leaf_accounts);
+                                                        reg->show_leaf_accounts);
     else
     {
         /* For multi-split transactions and stock splits,
          * use a special value. */
-        s = xaccTransGetSplit (xaccSplitGetParent(split), 1);
+        s = xaccTransGetSplit (xaccSplitGetParent (split), 1);
 
         if (s)
             name = g_strdup (SPLIT_TRANS_STR);
@@ -1540,15 +1535,15 @@ gnc_split_register_get_mxfrm_entry (VirtualLocation virt_loc,
     return name;
 }
 
-static char *
+static char*
 gnc_split_register_get_mxfrm_help (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    const char *help;
+    const char* help;
 
-    SplitRegister *reg = user_data;
-    Split *split;
-    Split *s;
+    SplitRegister* reg = user_data;
+    Split* split;
+    Split* s;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (!split)
@@ -1559,23 +1554,23 @@ gnc_split_register_get_mxfrm_help (VirtualLocation virt_loc,
     if (s)
     {
         help = gnc_split_register_get_mxfrm_entry (virt_loc, FALSE,
-                NULL, user_data);
+                                                   NULL, user_data);
         if (!help || *help == '\0')
-            help = _("Enter the account to transfer from, "
-                     "or choose one from the list");
+            help = _ ("Enter the account to transfer from, "
+                      "or choose one from the list");
     }
     else
     {
         /* For multi-split transactions and stock splits,
          * use a special value. */
-        s = xaccTransGetSplit (xaccSplitGetParent(split), 1);
+        s = xaccTransGetSplit (xaccSplitGetParent (split), 1);
 
         if (s)
-            help = _("This transaction has multiple splits; "
-                     "press the Split button to see them all");
+            help = _ ("This transaction has multiple splits; "
+                      "press the Split button to see them all");
         else if (g_strcmp0 ("stock-split", xaccSplitGetType (split)) == 0)
-            help = _("This transaction is a stock split; "
-                     "press the Split button to see details");
+            help = _ ("This transaction is a stock split; "
+                      "press the Split button to see details");
         else
             help = "";
     }
@@ -1583,45 +1578,48 @@ gnc_split_register_get_mxfrm_help (VirtualLocation virt_loc,
     return g_strdup (help);
 }
 
-/* Return the total amount of the transaction for splits of default account
- * and all subaccounts of the register. */
+/* Return the total value in the register currency of the transaction
+ * for splits of default account and all subaccounts of the register.
+ */
 static gnc_numeric
-get_trans_total_amount_subaccounts (SplitRegister *reg, Transaction *trans)
+get_trans_total_value_subaccounts (SplitRegister* reg, Transaction* trans)
 {
-    GList *children, *child;
-    Account *parent;
+    GList* children, *child;
+    Account* parent;
     gnc_numeric total = gnc_numeric_zero();
 
     /* Get a list of all subaccounts for matching */
-    parent = gnc_split_register_get_default_account(reg);
+    parent = gnc_split_register_get_default_account (reg);
     if (!parent)
         /* Register has no account, perhaps it's the general journal.  If it
            has no account then we have no way of picking out the desired splits,
            return zero. */
         return total;
-    children = gnc_account_get_descendants(parent);
-    children = g_list_append(children, parent);
+
+    children = gnc_account_get_descendants (parent);
+    children = g_list_append (children, parent);
 
     for (child = children; child; child = child->next)
     {
-        total = gnc_numeric_add_fixed(total, xaccTransGetAccountAmount(trans, child->data));
+        total = gnc_numeric_add_fixed (total, xaccTransGetAccountValue (trans,
+                                       child->data));
     }
 
-    g_list_free(children);
+    g_list_free (children);
 
     return total;
 }
 
-static const char *
+static const char*
 gnc_split_register_get_tdebcred_entry (VirtualLocation virt_loc,
                                        gboolean translate,
-                                       gboolean *conditionally_changed,
+                                       gboolean* conditionally_changed,
                                        gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char * cell_name;
+    SplitRegister* reg = user_data;
+    const char* cell_name;
     gnc_numeric total;
-    Split *split;
+    Split* split;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (!split)
@@ -1633,7 +1631,7 @@ gnc_split_register_get_tdebcred_entry (VirtualLocation virt_loc,
     {
     case GENERAL_JOURNAL:
     case INCOME_LEDGER:
-        total = get_trans_total_amount_subaccounts (reg, xaccSplitGetParent (split));
+        total = get_trans_total_value_subaccounts (reg, xaccSplitGetParent (split));
         break;
     default:
         total = get_trans_total_amount (reg, xaccSplitGetParent (split));
@@ -1644,16 +1642,17 @@ gnc_split_register_get_tdebcred_entry (VirtualLocation virt_loc,
         return NULL;
 
     if (gnc_numeric_negative_p (total) &&
-            gnc_cell_name_equal (cell_name, TDEBT_CELL))
+        gnc_cell_name_equal (cell_name, TDEBT_CELL))
         return NULL;
 
     if (gnc_numeric_positive_p (total) &&
-            gnc_cell_name_equal (cell_name, TCRED_CELL))
+        gnc_cell_name_equal (cell_name, TCRED_CELL))
         return NULL;
 
     total = gnc_numeric_abs (total);
 
-    return xaccPrintAmount (total, gnc_split_amount_print_info (split, FALSE));
+    return xaccPrintAmount (total, gnc_split_amount_print_info (split,
+                                                                reg->mismatched_commodities));
 }
 
 /* return TRUE if we have a RATE_CELL; return FALSE if we do not.
@@ -1693,10 +1692,10 @@ gnc_split_reg_has_rate_cell (SplitRegisterType type)
  * split->value directly.
  */
 gboolean
-gnc_split_register_needs_conv_rate (SplitRegister *reg,
-                                    Transaction *txn, Account *acc)
+gnc_split_register_needs_conv_rate (SplitRegister* reg,
+                                    Transaction* txn, Account* acc)
 {
-    gnc_commodity *txn_cur, *acc_com;
+    gnc_commodity* txn_cur, *acc_com;
 
     /* If there is not a RATE_CELL, then don't do anything */
     if (!gnc_split_reg_has_rate_cell (reg->type))
@@ -1711,17 +1710,17 @@ gnc_split_register_needs_conv_rate (SplitRegister *reg,
     return TRUE;
 }
 
-static const char *
+static const char*
 gnc_split_register_get_debcred_entry (VirtualLocation virt_loc,
                                       gboolean translate,
-                                      gboolean *conditionally_changed,
+                                      gboolean* conditionally_changed,
                                       gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
     gboolean is_debit;
-    Split *split;
-    Transaction *trans;
-    gnc_commodity *currency;
+    Split* split;
+    Transaction* trans;
+    gnc_commodity* currency;
 
     is_debit = gnc_cell_name_equal
                (gnc_table_get_cell_name (reg->table, virt_loc), DEBT_CELL);
@@ -1731,12 +1730,12 @@ gnc_split_register_get_debcred_entry (VirtualLocation virt_loc,
 
     currency = xaccTransGetCurrency (trans);
     if (!currency)
-        currency = gnc_default_currency ();
+        currency = gnc_default_currency();
 
     if (!split)
     {
         gnc_numeric imbalance;
-        Account *acc;
+        Account* acc;
 
         imbalance = xaccTransGetImbalanceValue (trans);
 
@@ -1745,8 +1744,8 @@ gnc_split_register_get_debcred_entry (VirtualLocation virt_loc,
 
         if (xaccTransUseTradingAccounts (trans))
         {
-            MonetaryList *imbal_list;
-            gnc_monetary *imbal_mon;
+            MonetaryList* imbal_list;
+            gnc_monetary* imbal_mon;
             imbal_list = xaccTransGetImbalance (trans);
 
             if (!imbal_list)
@@ -1758,27 +1757,27 @@ gnc_split_register_get_debcred_entry (VirtualLocation virt_loc,
             if (imbal_list->next)
             {
                 /* Multiple currency imbalance. */
-                gnc_monetary_list_free(imbal_list);
+                gnc_monetary_list_free (imbal_list);
                 return NULL;
             }
 
             imbal_mon = imbal_list->data;
-            if (!gnc_commodity_equal(gnc_monetary_commodity(*imbal_mon), currency))
+            if (!gnc_commodity_equal (gnc_monetary_commodity (*imbal_mon), currency))
             {
                 /* Imbalance is in wrong currency */
-                gnc_monetary_list_free(imbal_list);
+                gnc_monetary_list_free (imbal_list);
                 return NULL;
             }
 
-            if (!gnc_numeric_equal (gnc_monetary_value(*imbal_mon), imbalance))
+            if (!gnc_numeric_equal (gnc_monetary_value (*imbal_mon), imbalance))
             {
                 /* Value and commodity imbalances differ */
-                gnc_monetary_list_free(imbal_list);
+                gnc_monetary_list_free (imbal_list);
                 return NULL;
             }
 
             /* Done with the imbalance list */
-            gnc_monetary_list_free(imbal_list);
+            gnc_monetary_list_free (imbal_list);
         }
 
         imbalance = gnc_numeric_neg (imbalance);
@@ -1798,7 +1797,7 @@ gnc_split_register_get_debcred_entry (VirtualLocation virt_loc,
         if (gnc_split_register_needs_conv_rate (reg, trans, acc))
         {
             imbalance = gnc_numeric_mul (imbalance,
-                                         xaccTransGetAccountConvRate(trans, acc),
+                                         xaccTransGetAccountConvRate (trans, acc),
                                          gnc_commodity_get_fraction (currency),
                                          GNC_HOW_RND_ROUND_HALF_UP);
         }
@@ -1809,19 +1808,20 @@ gnc_split_register_get_debcred_entry (VirtualLocation virt_loc,
                                              GNC_HOW_RND_ROUND_HALF_UP);
         }
 
-        return xaccPrintAmount (imbalance, gnc_account_print_info (acc, FALSE));
+        return xaccPrintAmount (imbalance, gnc_account_print_info (acc,
+                                                                   reg->mismatched_commodities));
     }
 
     {
         gnc_numeric amount;
-        gnc_commodity *split_commodity;
+        gnc_commodity* split_commodity;
         GNCPrintAmountInfo print_info;
-        Account *account;
-        gnc_commodity * commodity;
+        Account* account;
+        gnc_commodity* commodity;
 
         account = gnc_split_register_get_default_account (reg);
         commodity = xaccAccountGetCommodity (account);
-        split_commodity = xaccAccountGetCommodity(xaccSplitGetAccount(split));
+        split_commodity = xaccAccountGetCommodity (xaccSplitGetAccount (split));
 
         if (xaccTransUseTradingAccounts (trans))
         {
@@ -1830,64 +1830,69 @@ gnc_split_register_get_debcred_entry (VirtualLocation virt_loc,
                                               virt_loc.vcell_loc);
 
             if (reg->type == STOCK_REGISTER ||
-                    reg->type == CURRENCY_REGISTER ||
-                    reg->type == PORTFOLIO_LEDGER)
+                reg->type == CURRENCY_REGISTER ||
+                reg->type == PORTFOLIO_LEDGER)
             {
-                gnc_commodity *amount_commodity;
+                gnc_commodity* amount_commodity;
                 /* security register.  If this split has price and shares columns,
                    use the value, otherwise use the amount.  */
-                if (gnc_split_register_use_security_cells(reg, virt_loc))
+                if (gnc_split_register_use_security_cells (reg, virt_loc))
                 {
-                    amount = xaccSplitGetValue(split);
+                    amount = xaccSplitGetValue (split);
                     amount_commodity = currency;
                 }
                 else
                 {
-                    amount = xaccSplitGetAmount(split);
+                    amount = xaccSplitGetAmount (split);
                     amount_commodity = split_commodity;
                 }
                 /* Show the currency if it is not the default currency */
                 if (is_current ||
-                        gnc_commodity_equiv(amount_commodity, gnc_default_currency()))
+                    gnc_commodity_equiv (amount_commodity, gnc_default_currency()))
                     use_symbol = FALSE;
                 else
                     use_symbol = TRUE;
-                print_info = gnc_commodity_print_info(amount_commodity, use_symbol);
+                print_info = gnc_commodity_print_info (amount_commodity, use_symbol);
             }
             else
             {
                 /* non-security register, always use the split amount. */
-                amount = xaccSplitGetAmount(split);
+                amount = xaccSplitGetAmount (split);
                 if (is_current ||
-                        gnc_commodity_equiv(split_commodity, commodity))
+                    gnc_commodity_equiv (split_commodity, commodity))
                     use_symbol = FALSE;
                 else
                     use_symbol = TRUE;
-                print_info = gnc_commodity_print_info(split_commodity, use_symbol);
+                print_info = gnc_commodity_print_info (split_commodity, use_symbol);
             }
         }
         else
         {
-            /* If this account is not a stock/mutual/currency account, and
-            * currency != the account commodity, then use the SplitAmount
-            * instead of the SplitValue.
-            */
+            gboolean currency_match;
             switch (reg->type)
             {
             case STOCK_REGISTER:
             case CURRENCY_REGISTER:
             case PORTFOLIO_LEDGER:
                 amount = xaccSplitGetValue (split);
-                print_info = gnc_commodity_print_info (currency, FALSE);
+                print_info = gnc_commodity_print_info (currency, reg->mismatched_commodities);
                 break;
 
+            /* If the register is not a stock/fund register that
+             * displays both amount and value, display the split value
+             * in the register's currency instead of the transaction's
+             * currency. Note that we don't want the split amount as
+             * some splits will be in a different currency.
+             */
             default:
                 if (commodity && !gnc_commodity_equal (commodity, currency))
                     /* Convert this to the "local" value */
                     amount = xaccSplitConvertAmount(split, account);
                 else
                     amount = xaccSplitGetValue (split);
-                print_info = gnc_account_print_info (account, FALSE);
+
+                print_info = gnc_account_print_info (account, reg->mismatched_commodities);
+                print_info.commodity = commodity;
                 break;
             }
         }
@@ -1909,23 +1914,23 @@ gnc_split_register_get_debcred_entry (VirtualLocation virt_loc,
 
 /* Calculates the register balance for each split at runtime.
  * This works regardless of the sort order. */
-static const char *
+static const char*
 gnc_split_register_get_rbaln_entry (VirtualLocation virt_loc,
                                     gboolean translate,
-                                    gboolean *conditionally_changed,
+                                    gboolean* conditionally_changed,
                                     gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    SRInfo *info = gnc_split_register_get_info (reg);
-    Split *split;
-    Transaction *trans;
+    SplitRegister* reg = user_data;
+    SRInfo* info = gnc_split_register_get_info (reg);
+    Split* split;
+    Transaction* trans;
     gnc_numeric balance;
-    Account *account;
+    Account* account;
 
     /* Return NULL if this is a blank transaction. */
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (split == xaccSplitLookup (&info->blank_split_guid,
-                                  gnc_get_current_book ()))
+                                  gnc_get_current_book()))
         return NULL;
 
     trans = xaccSplitGetParent (split);
@@ -1948,20 +1953,32 @@ static gboolean
 gnc_split_register_cursor_is_readonly (VirtualLocation virt_loc,
                                        gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Split *split;
-    Transaction *txn;
+    SplitRegister* reg = user_data;
+    Split* split;
+    Transaction* txn;
     char type;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
-    if (!split) return FALSE;
+
+    if (!split) // this could be the blank split
+    {
+        txn = gnc_split_register_get_current_trans (reg);
+
+        if (txn) // get the current trans and see if read_only required
+        {
+            if (xaccTransGetReadOnly (txn)
+                || xaccTransIsReadonlyByPostedDate (txn))
+                return (TRUE);
+        }
+        return FALSE;
+    }
 
     txn = xaccSplitGetParent (split);
     if (!txn) return FALSE;
 
-    if (xaccTransGetReadOnly(txn)
-            || xaccTransIsReadonlyByPostedDate(txn))
-        return(TRUE);
+    if (xaccTransGetReadOnly (txn)
+        || xaccTransIsReadonlyByPostedDate (txn))
+        return (TRUE);
 
     type = xaccTransGetTxnType (txn);
     return (type == TXN_TYPE_INVOICE);
@@ -1969,7 +1986,7 @@ gnc_split_register_cursor_is_readonly (VirtualLocation virt_loc,
 
 static CellIOFlags
 gnc_split_register_get_inactive_io_flags (VirtualLocation virt_loc,
-        gpointer user_data)
+                                          gpointer user_data)
 {
     if (gnc_split_register_cursor_is_readonly (virt_loc, user_data))
         return XACC_CELL_ALLOW_READ_ONLY;
@@ -1979,7 +1996,7 @@ gnc_split_register_get_inactive_io_flags (VirtualLocation virt_loc,
 
 static CellIOFlags
 gnc_split_register_get_standard_io_flags (VirtualLocation virt_loc,
-        gpointer user_data)
+                                          gpointer user_data)
 {
     if (gnc_split_register_cursor_is_readonly (virt_loc, user_data))
         return XACC_CELL_ALLOW_READ_ONLY;
@@ -1998,10 +2015,20 @@ gnc_split_register_get_recn_io_flags (VirtualLocation virt_loc,
 }
 
 static CellIOFlags
+gnc_split_register_get_doclink_io_flags (VirtualLocation virt_loc,
+                                         gpointer user_data)
+{
+    if (gnc_split_register_cursor_is_readonly (virt_loc, user_data))
+        return XACC_CELL_ALLOW_READ_ONLY;
+
+    return XACC_CELL_ALLOW_ALL | XACC_CELL_ALLOW_EXACT_ONLY;
+}
+
+static CellIOFlags
 gnc_split_register_get_ddue_io_flags (VirtualLocation virt_loc,
                                       gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
     char type;
 
     type = gnc_split_register_get_type_value (reg, virt_loc);
@@ -2024,10 +2051,10 @@ gnc_split_register_get_rate_io_flags (VirtualLocation virt_loc,
 
 static CellIOFlags
 gnc_split_register_get_debcred_io_flags (VirtualLocation virt_loc,
-        gpointer user_data)
+                                         gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Split *split;
+    SplitRegister* reg = user_data;
+    Split* split;
 
     if (gnc_split_register_cursor_is_readonly (virt_loc, user_data))
         return XACC_CELL_ALLOW_READ_ONLY;
@@ -2042,9 +2069,9 @@ gnc_split_register_get_debcred_io_flags (VirtualLocation virt_loc,
 
 static CellIOFlags
 gnc_split_register_get_security_io_flags (VirtualLocation virt_loc,
-        gpointer user_data)
+                                          gpointer user_data)
 {
-    SplitRegister *reg = user_data;
+    SplitRegister* reg = user_data;
 
     if (gnc_split_register_cursor_is_readonly (virt_loc, user_data))
         return XACC_CELL_ALLOW_READ_ONLY;
@@ -2056,41 +2083,42 @@ gnc_split_register_get_security_io_flags (VirtualLocation virt_loc,
 }
 
 static gboolean
-xaccTransWarnReadOnly (GtkWidget *parent, Transaction *trans)
+xaccTransWarnReadOnly (GtkWidget* parent, Transaction* trans)
 {
-    GtkWidget *dialog;
-    const gchar *reason;
-    const gchar *format =
-        _("Cannot modify or delete this transaction. This transaction is "
-          "marked read-only because:\n\n'%s'");
+    GtkWidget* dialog;
+    const gchar* reason;
+    const gchar* format =
+        _ ("Cannot modify or delete this transaction. This transaction is "
+           "marked read-only because:\n\n'%s'");
 
     if (!trans) return FALSE;
 
     reason = xaccTransGetReadOnly (trans);
     if (reason)
     {
-        dialog = gtk_message_dialog_new(GTK_WINDOW(parent),
-                                        0,
-                                        GTK_MESSAGE_ERROR,
-                                        GTK_BUTTONS_OK,
-                                        format,
-                                        reason);
-        gtk_dialog_run(GTK_DIALOG(dialog));
-        gtk_widget_destroy(dialog);
+        dialog = gtk_message_dialog_new (GTK_WINDOW (parent),
+                                         0,
+                                         GTK_MESSAGE_ERROR,
+                                         GTK_BUTTONS_OK,
+                                         format,
+                                         reason);
+        gtk_dialog_run (GTK_DIALOG (dialog));
+        gtk_widget_destroy (dialog);
         return TRUE;
     }
     return FALSE;
 }
 
-static gboolean reg_trans_has_reconciled_splits (SplitRegister *reg, Transaction *trans)
+static gboolean reg_trans_has_reconciled_splits (SplitRegister* reg,
+                                                 Transaction* trans)
 {
-    GList *node;
+    GList* node;
 
     for (node = xaccTransGetSplitList (trans); node; node = node->next)
     {
-        Split *split = node->data;
+        Split* split = node->data;
 
-        if (!xaccTransStillHasSplit(trans, split))
+        if (!xaccTransStillHasSplit (trans, split))
             continue;
 
         if ((xaccSplitGetReconcile (split) == YREC) &&
@@ -2104,15 +2132,15 @@ static gboolean reg_trans_has_reconciled_splits (SplitRegister *reg, Transaction
 static gboolean
 gnc_split_register_confirm (VirtualLocation virt_loc, gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    SRInfo *info = gnc_split_register_get_info (reg);
-    Transaction *trans;
-    Split *split;
+    SplitRegister* reg = user_data;
+    SRInfo* info = gnc_split_register_get_info (reg);
+    Transaction* trans;
+    Split* split;
     char recn;
-    const char *cell_name;
+    const char* cell_name;
     gboolean protected_split_cell, protected_trans_cell;
-    const gchar *title = NULL;
-    const gchar *message = NULL;
+    const gchar* title = NULL;
+    const gchar* message = NULL;
 
     /* This assumes we reset the flag whenever we change splits.
      * This happens in gnc_split_register_move_cursor(). */
@@ -2124,7 +2152,7 @@ gnc_split_register_confirm (VirtualLocation virt_loc, gpointer user_data)
         return TRUE;
 
     trans = xaccSplitGetParent (split);
-    if (xaccTransWarnReadOnly(gnc_split_register_get_parent(reg), trans))
+    if (xaccTransWarnReadOnly (gnc_split_register_get_parent (reg), trans))
         return FALSE;
 
     if (!reg_trans_has_reconciled_splits (reg, trans))
@@ -2132,7 +2160,7 @@ gnc_split_register_confirm (VirtualLocation virt_loc, gpointer user_data)
 
     if (gnc_table_layout_get_cell_changed (reg->table->layout, RECN_CELL, FALSE))
         recn = gnc_recn_cell_get_flag
-               ((RecnCell *) gnc_table_layout_get_cell (reg->table->layout, RECN_CELL));
+               ((RecnCell*) gnc_table_layout_get_cell (reg->table->layout, RECN_CELL));
     else if (g_list_index (reg->unrecn_splits, split) != -1)
         recn = NREC;   /* A previous run of this function marked this split for unreconciling */
     else
@@ -2142,35 +2170,41 @@ gnc_split_register_confirm (VirtualLocation virt_loc, gpointer user_data)
     cell_name = gnc_table_get_cell_name (reg->table, virt_loc);
 
     /* if we change a transfer cell, we want the other split */
-    if (g_strcmp0(cell_name, "transfer") == 0)
+    if (g_strcmp0 (cell_name, "transfer") == 0)
         recn = xaccSplitGetReconcile (xaccSplitGetOtherSplit (split));
 
     /* These cells can not be changed */
-    protected_split_cell = (g_strcmp0(cell_name, "account") == 0) || (g_strcmp0(cell_name, "transfer") == 0) || (g_strcmp0(cell_name, "debit") == 0) || (g_strcmp0(cell_name, "credit") == 0);
-    protected_trans_cell = (g_strcmp0(cell_name, "date") == 0) || (g_strcmp0(cell_name, "num") == 0) || (g_strcmp0(cell_name, "description") == 0);
+    protected_split_cell = (g_strcmp0 (cell_name, "account") == 0) ||
+                           (g_strcmp0 (cell_name, "transfer") == 0) ||
+                           (g_strcmp0 (cell_name, "debit") == 0) ||
+                           (g_strcmp0 (cell_name, "credit") == 0);
+    protected_trans_cell = (g_strcmp0 (cell_name, "date") == 0) ||
+                           (g_strcmp0 (cell_name, "num") == 0) ||
+                           (g_strcmp0 (cell_name, "description") == 0);
 
-    PINFO ("Protected transaction cell %d, Protected split cell %d, Cell is %s", protected_trans_cell, protected_split_cell, cell_name);
+    PINFO ("Protected transaction cell %d, Protected split cell %d, Cell is %s",
+           protected_trans_cell, protected_split_cell, cell_name);
 
     if (protected_trans_cell)
     {
-        GList *node;
-        gchar *acc_list = NULL;
-        gchar *message_format;
+        GList* node;
+        gchar* acc_list = NULL;
+        gchar* message_format;
 
         for (node = xaccTransGetSplitList (trans); node; node = node->next)
         {
-            Split *split = node->data;
+            Split* split = node->data;
 
             if (xaccSplitGetReconcile (split) == YREC)
             {
-                Account *acc = xaccSplitGetAccount (split);
-                gchar *name = gnc_account_get_full_name (acc);
+                Account* acc = xaccSplitGetAccount (split);
+                gchar* name = gnc_account_get_full_name (acc);
 
                 if (acc_list == NULL)
                     acc_list = g_strconcat ("\n", name, NULL);
                 else
                 {
-                    gchar *acc_list_copy = g_strdup(acc_list);
+                    gchar* acc_list_copy = g_strdup (acc_list);
                     g_free (acc_list);
                     acc_list = g_strconcat (acc_list_copy, "\n", name, NULL);
                     g_free (acc_list_copy);
@@ -2178,11 +2212,10 @@ gnc_split_register_confirm (VirtualLocation virt_loc, gpointer user_data)
                 g_free (name);
             }
         }
-        title = _("Change transaction containing a reconciled split?");
+        title = _ ("Change transaction containing a reconciled split?");
         message_format =
-         _("The transaction you are about to change is protected because it contains reconciled splits in the following accounts:\n%s"
-           "\n\nIf you continue editing this transaction all reconciled splits will be unreconciled. "
-          "This might make future reconciliation difficult! Continue with this change?");
+            _ ("The transaction you are about to change contains reconciled splits in the following accounts:\n%s"
+               "\n\nAre you sure you want to continue with this change?");
 
         message = g_strdup_printf (message_format, acc_list);
         g_free (acc_list);
@@ -2190,37 +2223,38 @@ gnc_split_register_confirm (VirtualLocation virt_loc, gpointer user_data)
 
     if (protected_split_cell)
     {
-        title = _("Change reconciled split?");
+        title = _ ("Change reconciled split?");
         message =
-         _("You are about to change a protected field of a reconciled split. "
-           "If you continue editing this split it will be unreconciled. "
-           "This might make future reconciliation difficult! Continue with this change?");
+            _ ("You are about to change a protected field of a reconciled split. "
+               "If you continue editing this split it will be unreconciled. "
+               "This might make future reconciliation difficult! Continue with this change?");
     }
 
     if ((recn == YREC && protected_split_cell) || protected_trans_cell)
     {
-        GtkWidget *dialog, *window;
+        GtkWidget* dialog, *window;
         gint response;
 
         /* Does the user want to be warned? */
-        window = gnc_split_register_get_parent(reg);
+        window = gnc_split_register_get_parent (reg);
         dialog =
-            gtk_message_dialog_new(GTK_WINDOW(window),
-                                   GTK_DIALOG_DESTROY_WITH_PARENT,
-                                   GTK_MESSAGE_WARNING,
-                                   GTK_BUTTONS_CANCEL,
-                                   "%s", title);
-        gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog),
-                "%s", message);
+            gtk_message_dialog_new (GTK_WINDOW (window),
+                                    GTK_DIALOG_DESTROY_WITH_PARENT,
+                                    GTK_MESSAGE_WARNING,
+                                    GTK_BUTTONS_CANCEL,
+                                    "%s", title);
+        gtk_message_dialog_format_secondary_text (GTK_MESSAGE_DIALOG (dialog),
+                                                  "%s", message);
 
         if (protected_split_cell)
-            gtk_dialog_add_button(GTK_DIALOG(dialog), _("Chan_ge Split"),
-                              GTK_RESPONSE_YES);
+            gtk_dialog_add_button (GTK_DIALOG (dialog), _ ("Chan_ge Split"),
+                                   GTK_RESPONSE_YES);
         else
-            gtk_dialog_add_button(GTK_DIALOG(dialog), _("Chan_ge Transaction"),
-                              GTK_RESPONSE_YES);
-        response = gnc_dialog_run(GTK_DIALOG(dialog), GNC_PREF_WARN_REG_RECD_SPLIT_MOD);
-        gtk_widget_destroy(dialog);
+            gtk_dialog_add_button (GTK_DIALOG (dialog), _ ("Chan_ge Transaction"),
+                                   GTK_RESPONSE_YES);
+        response = gnc_dialog_run (GTK_DIALOG (dialog),
+                                   GNC_PREF_WARN_REG_RECD_SPLIT_MOD);
+        gtk_widget_destroy (dialog);
         if (response != GTK_RESPONSE_YES)
             return FALSE;
 
@@ -2231,20 +2265,13 @@ gnc_split_register_confirm (VirtualLocation virt_loc, gpointer user_data)
             {
                 reg->unrecn_splits = g_list_append (reg->unrecn_splits, split);
                 gnc_recn_cell_set_flag
-                    ((RecnCell *) gnc_table_layout_get_cell (reg->table->layout, RECN_CELL),
-                     NREC);
+                ((RecnCell*) gnc_table_layout_get_cell (reg->table->layout, RECN_CELL),
+                 NREC);
             }
         }
 
-        if (protected_trans_cell)
-        {
-            if (reg->unrecn_splits != NULL)
-                g_list_free (reg->unrecn_splits);
-
-            reg->unrecn_splits = g_list_copy (xaccTransGetSplitList (trans));
-        }
-
-        PINFO ("Unreconcile split list length is %d", g_list_length(reg->unrecn_splits));
+        PINFO ("Unreconcile split list length is %d",
+               g_list_length (reg->unrecn_splits));
         info->change_confirmed = TRUE;
     }
     return TRUE;
@@ -2253,27 +2280,27 @@ gnc_split_register_confirm (VirtualLocation virt_loc, gpointer user_data)
 static gpointer
 gnc_split_register_guid_malloc (void)
 {
-    GncGUID *guid;
+    GncGUID* guid;
 
-    guid = guid_malloc ();
+    guid = guid_malloc();
 
-    *guid = *guid_null ();
+    *guid = *guid_null();
 
     return guid;
 }
 
-static const char *
+static const char*
 gnc_template_register_get_xfrm_entry (VirtualLocation virt_loc,
                                       gboolean translate,
-                                      gboolean *conditionally_changed,
+                                      gboolean* conditionally_changed,
                                       gpointer user_data)
 {
-    static char *name = NULL;
+    static char* name = NULL;
 
-    SplitRegister *reg = user_data;
-    Split *split;
-    Account *account;
-    GncGUID *guid = NULL;
+    SplitRegister* reg = user_data;
+    Split* split;
+    Account* account;
+    GncGUID* guid = NULL;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (!split)
@@ -2284,88 +2311,88 @@ gnc_template_register_get_xfrm_entry (VirtualLocation virt_loc,
      */
     g_free (name);
     qof_instance_get (QOF_INSTANCE (split),
-              "sx-account", &guid,
-              NULL);
-    account = xaccAccountLookup (guid, gnc_get_current_book ());
+                      "sx-account", &guid,
+                      NULL);
+    account = xaccAccountLookup (guid, gnc_get_current_book());
     name = account ? gnc_get_account_name_for_split_register (account,
-                         reg->show_leaf_accounts) : NULL;
+                                                              reg->show_leaf_accounts) : NULL;
     return name;
 }
 
-static const char *
+static const char*
 gnc_template_register_get_fdebt_entry (VirtualLocation virt_loc,
                                        gboolean translate,
-                                       gboolean *conditionally_changed,
+                                       gboolean* conditionally_changed,
                                        gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Split *split = gnc_split_register_get_split(reg, virt_loc.vcell_loc);
-    char *formula = NULL;
+    SplitRegister* reg = user_data;
+    Split* split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
+    char* formula = NULL;
 
     if (split)
     {
         qof_instance_get (QOF_INSTANCE (split),
-                  "sx-debit-formula", &formula,
-                  NULL);
+                          "sx-debit-formula", &formula,
+                          NULL);
     }
 
     return formula;
 }
 
-static char *
+static char*
 gnc_split_register_get_fdebt_help (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help;
+    SplitRegister* reg = user_data;
+    const char* help;
 
     help = gnc_table_get_entry (reg->table, virt_loc);
     if (!help || *help == '\0')
-        help = _("Enter debit formula for real transaction");
+        help = _ ("Enter debit formula for real transaction");
 
     return g_strdup (help);
 }
 
-static const char *
+static const char*
 gnc_template_register_get_fcred_entry (VirtualLocation virt_loc,
                                        gboolean translate,
-                                       gboolean *conditionally_changed,
+                                       gboolean* conditionally_changed,
                                        gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Split *split = gnc_split_register_get_split(reg, virt_loc.vcell_loc);
-    char *formula = NULL;
+    SplitRegister* reg = user_data;
+    Split* split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
+    char* formula = NULL;
 
     if (split)
     {
         qof_instance_get (QOF_INSTANCE (split),
-                  "sx-credit-formula", &formula,
-                  NULL);
+                          "sx-credit-formula", &formula,
+                          NULL);
     }
 
     return formula;
 
 }
 
-static char *
+static char*
 gnc_split_register_get_fcred_help (VirtualLocation virt_loc,
                                    gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help = gnc_table_get_entry (reg->table, virt_loc);
+    SplitRegister* reg = user_data;
+    const char* help = gnc_table_get_entry (reg->table, virt_loc);
 
     if (!help || *help == '\0')
-        help = _("Enter credit formula for real transaction");
+        help = _ ("Enter credit formula for real transaction");
 
     return g_strdup (help);
 }
 
-static char *
+static char*
 gnc_split_register_get_default_help (VirtualLocation virt_loc,
                                      gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    const char *help = gnc_table_get_entry(reg->table, virt_loc);
+    SplitRegister* reg = user_data;
+    const char* help = gnc_table_get_entry (reg->table, virt_loc);
 
     return g_strdup (help);
 }
@@ -2378,23 +2405,23 @@ gnc_split_register_get_default_help (VirtualLocation virt_loc,
  * the split. I'm not sure that it's what was originally intended, but at least
  * it can do something now. <jralls, 8 June 2015>
  */
-static const char *
+static const char*
 gnc_template_register_get_debcred_entry (VirtualLocation virt_loc,
-        gboolean translate,
-        gboolean *conditionally_changed,
-        gpointer user_data)
+                                         gboolean translate,
+                                         gboolean* conditionally_changed,
+                                         gpointer user_data)
 {
-    SplitRegister *reg = user_data;
-    Split *split;
-    gnc_numeric *amount, amount2;
-    const char * cell_name;
+    SplitRegister* reg = user_data;
+    Split* split;
+    gnc_numeric* amount, amount2;
+    const char* cell_name;
 
     split = gnc_split_register_get_split (reg, virt_loc.vcell_loc);
     if (!split)
         return gnc_split_register_get_debcred_entry (virt_loc,
-                translate,
-                conditionally_changed,
-                user_data);
+                                                     translate,
+                                                     conditionally_changed,
+                                                     user_data);
 
     cell_name = gnc_table_get_cell_name (reg->table, virt_loc);
     if (gnc_cell_name_equal (cell_name, DEBT_CELL))
@@ -2416,7 +2443,8 @@ gnc_template_register_get_debcred_entry (VirtualLocation virt_loc,
 
     amount2 = gnc_numeric_abs (*amount);
     g_free (amount);
-    return xaccPrintAmount (amount2, gnc_default_print_info (FALSE));
+    return xaccPrintAmount (amount2,
+                            gnc_default_print_info (reg->mismatched_commodities));
 }
 
 static void
@@ -2428,8 +2456,8 @@ gnc_split_register_guid_free (gpointer guid)
 static void
 gnc_split_register_guid_copy (gpointer p_to, gconstpointer p_from)
 {
-    GncGUID *to = p_to;
-    const GncGUID *from = p_from;
+    GncGUID* to = p_to;
+    const GncGUID* from = p_from;
 
     g_return_if_fail (to != NULL);
     *to = from ? *from : *guid_null();
@@ -2437,35 +2465,40 @@ gnc_split_register_guid_copy (gpointer p_to, gconstpointer p_from)
 
 
 static void
-gnc_split_register_colorize_negative (gpointer gsettings, gchar *key, gpointer unused)
+gnc_split_register_colorize_negative (gpointer gsettings, gchar* key,
+                                      gpointer unused)
 {
-    use_red_for_negative = gnc_prefs_get_bool(GNC_PREFS_GROUP_GENERAL,
-                                              GNC_PREF_NEGATIVE_IN_RED);
+    use_red_for_negative = gnc_prefs_get_bool (GNC_PREFS_GROUP_GENERAL,
+                                               GNC_PREF_NEGATIVE_IN_RED);
 }
 
 
 static gpointer
 gnc_split_register_model_add_hooks (gpointer unused)
 {
-    gnc_prefs_register_cb(GNC_PREFS_GROUP_GENERAL, GNC_PREF_NEGATIVE_IN_RED,
-                          gnc_split_register_colorize_negative,
-                          NULL);
+    gulong id = gnc_prefs_register_cb (GNC_PREFS_GROUP_GENERAL,
+                                       GNC_PREF_NEGATIVE_IN_RED,
+                                       gnc_split_register_colorize_negative,
+                                       NULL);
+
+    gnc_prefs_set_reg_negative_color_pref_id (id);
+
     /* Get the initial value */
-    use_red_for_negative = gnc_prefs_get_bool(GNC_PREFS_GROUP_GENERAL,
-                                              GNC_PREF_NEGATIVE_IN_RED);
+    use_red_for_negative = gnc_prefs_get_bool (GNC_PREFS_GROUP_GENERAL,
+                                               GNC_PREF_NEGATIVE_IN_RED);
     return NULL;
 }
 
 
-TableModel *
+TableModel*
 gnc_split_register_model_new (void)
 {
-    TableModel *model;
+    TableModel* model;
     static GOnce once = G_ONCE_INIT;
 
-    g_once(&once, gnc_split_register_model_add_hooks, NULL);
+    g_once (&once, gnc_split_register_model_add_hooks, NULL);
 
-    model = gnc_table_model_new ();
+    model = gnc_table_model_new();
 
     // entry handlers
     gnc_table_model_set_entry_handler (model,
@@ -2549,8 +2582,8 @@ gnc_split_register_model_new (void)
                                        TCRED_CELL);
 
     gnc_table_model_set_entry_handler (model,
-                                       gnc_split_register_get_associate_entry,
-                                       ASSOC_CELL);
+                                       gnc_split_register_get_doclink_entry,
+                                       DOCLINK_CELL);
 
     gnc_table_model_set_entry_handler (model,
                                        gnc_split_register_get_type_entry,
@@ -2650,8 +2683,8 @@ gnc_split_register_model_new (void)
                                        TBALN_CELL);
 
     gnc_table_model_set_label_handler (model,
-                                       gnc_split_register_get_associate_label,
-                                       ASSOC_CELL);
+                                       gnc_split_register_get_doclink_label,
+                                       DOCLINK_CELL);
 
     gnc_table_model_set_label_handler (model,
                                        gnc_split_register_get_type_label,
@@ -2678,16 +2711,16 @@ gnc_split_register_model_new (void)
 //        model, gnc_split_register_get_default_tooltip);
 
     gnc_table_model_set_tooltip_handler (model,
-                                       gnc_split_register_get_recn_tooltip,
-                                       RECN_CELL);
+                                         gnc_split_register_get_recn_tooltip,
+                                         RECN_CELL);
 
     gnc_table_model_set_tooltip_handler (model,
-                                       gnc_split_register_get_associate_tooltip,
-                                       ASSOC_CELL);
+                                         gnc_split_register_get_doclink_tooltip,
+                                         DOCLINK_CELL);
 
 
     // help handlers
-    gnc_table_model_set_default_help_handler(
+    gnc_table_model_set_default_help_handler (
         model, gnc_split_register_get_default_help);
 
     gnc_table_model_set_help_handler (model,
@@ -2750,8 +2783,12 @@ gnc_split_register_model_new (void)
                                       gnc_split_register_get_fdebt_help,
                                       FDEBT_CELL);
 
+    gnc_table_model_set_help_handler (model,
+                                      gnc_split_register_get_doclink_help,
+                                      DOCLINK_CELL);
+
     // io flag handlers
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, DATE_CELL);
 
     /* FIXME: We really only need a due date for 'invoices', not for
@@ -2759,88 +2796,88 @@ gnc_split_register_model_new (void)
      * due-date for transactions that credit the ACCT_TYPE_RECEIVABLE or
      * debit the ACCT_TYPE_PAYABLE account type.
      */
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_rate_io_flags, RATE_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_ddue_io_flags, DDUE_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, NUM_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, TNUM_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, DESC_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, ACTN_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, XFRM_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, MEMO_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, MXFRM_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, NOTES_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_inactive_io_flags, VNOTES_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_debcred_io_flags, CRED_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_debcred_io_flags, DEBT_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_recn_io_flags, RECN_CELL);
 
-    gnc_table_model_set_io_flags_handler(
-        model, gnc_split_register_get_recn_io_flags, ASSOC_CELL);
+    gnc_table_model_set_io_flags_handler (
+        model, gnc_split_register_get_doclink_io_flags, DOCLINK_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_recn_io_flags, TYPE_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_security_io_flags, PRIC_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_security_io_flags, SHRS_CELL);
 
 
-    gnc_table_model_set_default_cell_color_handler(
+    gnc_table_model_set_default_cell_color_handler (
         model, gnc_split_register_get_cell_color);
 
-    gnc_table_model_set_cell_color_handler(
+    gnc_table_model_set_cell_color_handler (
         model, gnc_split_register_get_debcred_color, DEBT_CELL);
 
-    gnc_table_model_set_cell_color_handler(
+    gnc_table_model_set_cell_color_handler (
         model, gnc_split_register_get_debcred_color, CRED_CELL);
 
-    gnc_table_model_set_cell_color_handler(
+    gnc_table_model_set_cell_color_handler (
         model, gnc_split_register_get_debcred_color, TDEBT_CELL);
 
-    gnc_table_model_set_cell_color_handler(
+    gnc_table_model_set_cell_color_handler (
         model, gnc_split_register_get_debcred_color, TCRED_CELL);
 
-    gnc_table_model_set_cell_color_handler(
+    gnc_table_model_set_cell_color_handler (
         model, gnc_split_register_get_debcred_color, FCRED_CELL);
 
-    gnc_table_model_set_cell_color_handler(
+    gnc_table_model_set_cell_color_handler (
         model, gnc_split_register_get_debcred_color, FDEBT_CELL);
 
 
-    gnc_table_model_set_default_cell_border_handler(
+    gnc_table_model_set_default_cell_border_handler (
         model, gnc_split_register_get_border);
 
 
-    gnc_table_model_set_default_confirm_handler(
+    gnc_table_model_set_default_confirm_handler (
         model, gnc_split_register_confirm);
 
     model->cell_data_allocator   = gnc_split_register_guid_malloc;
@@ -2852,44 +2889,44 @@ gnc_split_register_model_new (void)
     return model;
 }
 
-TableModel *
+TableModel*
 gnc_template_register_model_new (void)
 {
-    TableModel *model;
+    TableModel* model;
 
-    model = gnc_split_register_model_new ();
+    model = gnc_split_register_model_new();
 
-    gnc_table_model_set_entry_handler(
-        model, gnc_split_register_get_inactive_date_entry, DATE_CELL );
+    gnc_table_model_set_entry_handler (
+        model, gnc_split_register_get_inactive_date_entry, DATE_CELL);
 
-    gnc_table_model_set_entry_handler(
-        model, gnc_split_register_get_inactive_date_entry, DDUE_CELL );
+    gnc_table_model_set_entry_handler (
+        model, gnc_split_register_get_inactive_date_entry, DDUE_CELL);
 
-    gnc_table_model_set_io_flags_handler(
-        model, gnc_split_register_get_inactive_io_flags, DATE_CELL );
+    gnc_table_model_set_io_flags_handler (
+        model, gnc_split_register_get_inactive_io_flags, DATE_CELL);
 
-    gnc_table_model_set_io_flags_handler(
-        model, gnc_split_register_get_inactive_io_flags, DDUE_CELL );
+    gnc_table_model_set_io_flags_handler (
+        model, gnc_split_register_get_inactive_io_flags, DDUE_CELL);
 
-    gnc_table_model_set_entry_handler(
+    gnc_table_model_set_entry_handler (
         model, gnc_template_register_get_xfrm_entry, XFRM_CELL);
 
-    gnc_table_model_set_entry_handler(
+    gnc_table_model_set_entry_handler (
         model, gnc_template_register_get_fdebt_entry, FDEBT_CELL);
 
-    gnc_table_model_set_entry_handler(
+    gnc_table_model_set_entry_handler (
         model, gnc_template_register_get_fcred_entry, FCRED_CELL);
 
-    gnc_table_model_set_entry_handler(
+    gnc_table_model_set_entry_handler (
         model, gnc_template_register_get_debcred_entry, DEBT_CELL);
 
-    gnc_table_model_set_entry_handler(
+    gnc_table_model_set_entry_handler (
         model, gnc_template_register_get_debcred_entry, CRED_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, FCRED_CELL);
 
-    gnc_table_model_set_io_flags_handler(
+    gnc_table_model_set_io_flags_handler (
         model, gnc_split_register_get_standard_io_flags, FDEBT_CELL);
 
     gnc_template_register_model_add_save_handlers (model);

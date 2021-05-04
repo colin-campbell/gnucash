@@ -78,7 +78,7 @@ struct _GNCGeneralSearchPrivate
 G_DEFINE_TYPE_WITH_PRIVATE(GNCGeneralSearch, gnc_general_search, GTK_TYPE_BOX)
 
 #define _PRIVATE(o) \
-   (G_TYPE_INSTANCE_GET_PRIVATE ((o), GNC_TYPE_GENERAL_SEARCH, GNCGeneralSearchPrivate))
+   ((GNCGeneralSearchPrivate*)g_type_instance_get_private((GTypeInstance*)o, GNC_TYPE_GENERAL_SEARCH))
 
 static GtkBoxClass *parent_class;
 static guint general_search_signals[LAST_SIGNAL];
@@ -398,7 +398,6 @@ create_children (GNCGeneralSearch *gsl,
     completion = gtk_entry_completion_new();
     gtk_entry_completion_set_model(completion, GTK_TREE_MODEL(list_store));
     gtk_entry_completion_set_text_column(completion, 0);
-    gtk_entry_completion_set_inline_completion(completion, TRUE);
     gtk_entry_set_completion(GTK_ENTRY(gsl->entry), completion);
 
     g_signal_connect (G_OBJECT (completion), "match_selected",
@@ -507,11 +506,12 @@ gnc_general_search_set_selected (GNCGeneralSearch *gsl, gpointer selection)
 
     gnc_gui_component_clear_watches (priv->component_id);
 
-    if (selection)
+    if (selection && priv->get_guid)
     {
         const QofParam *get_guid = priv->get_guid;
-        priv->guid = * ((GncGUID *)(get_guid->param_getfcn
-                                    (gsl->selected_item, get_guid)));
+        GncGUID *guid = (GncGUID *)(get_guid->param_getfcn (gsl->selected_item,
+                                                            get_guid));
+        priv->guid = guid ? *guid : *guid_null ();
         gnc_gui_component_watch_entity
         (priv->component_id, &(priv->guid),
          QOF_EVENT_MODIFY | QOF_EVENT_DESTROY);

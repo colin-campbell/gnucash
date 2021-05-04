@@ -20,11 +20,11 @@
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  *                                                                  *
  *******************************************************************/
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
-
-#include <glib.h>
 #include <string.h>
 
 #include "SX-book.h"
@@ -593,7 +593,7 @@ sx_templ_acct_handler (xmlNodePtr node, gpointer sx_pdata)
 
     account = xaccAccountLookup (templ_acct_guid, pdata->book);
     sx_set_template_account (sx, account);
-    g_free (templ_acct_guid);
+    guid_free (templ_acct_guid);
 
     return TRUE;
 }

@@ -21,23 +21,29 @@
  *                                                                  *
 \********************************************************************/
 
+#include <glib.h>
+#include <glib/gi18n.h>
+
 extern "C" {
 #include <platform.h>
 #if PLATFORM(WINDOWS)
 #include <windows.h>
 #endif
 
-#include <glib.h>
-#include <glib/gi18n.h>
-
 #include "engine-helpers.h"
 #include "gnc-ui-util.h"
 }
 
+#include <exception>
+#include <map>
 #include <string>
+#include <boost/locale.hpp>
 #include <boost/regex.hpp>
 #include <boost/regex/icu.hpp>
+#include <gnc-locale-utils.hpp>
 #include "gnc-imp-props-price.hpp"
+
+namespace bl = boost::locale;
 
 G_GNUC_UNUSED static QofLogModule log_module = GNC_MOD_IMPORT;
 
@@ -229,17 +235,17 @@ void GncImportPrice::set (GncPricePropType prop_type, const std::string& value, 
     }
     catch (const std::invalid_argument& e)
     {
-        auto err_str = std::string(_(gnc_price_col_type_strs[prop_type])) +
-                       std::string(_(" could not be understood.\n")) +
-                       e.what();
+        auto err_str = (bl::format (bl::translate ("Column '{1}' could not be understood.\n")) %
+                        bl::translate (gnc_price_col_type_strs[prop_type])).str(gnc_get_boost_locale()) +
+                        e.what();
         m_errors.emplace(prop_type, err_str);
         throw std::invalid_argument (err_str);
     }
     catch (const std::out_of_range& e)
     {
-        auto err_str = std::string(_(gnc_price_col_type_strs[prop_type])) +
-                       std::string(_(" could not be understood.\n")) +
-                       e.what();
+        auto err_str = (bl::format (bl::translate ("Column '{1}' could not be understood.\n")) %
+                        bl::translate (gnc_price_col_type_strs[prop_type])).str(gnc_get_boost_locale()) +
+                        e.what();
         m_errors.emplace(prop_type, err_str);
         throw std::invalid_argument (err_str);
     }
@@ -316,7 +322,7 @@ Result GncImportPrice::create_price (QofBook* book, GNCPriceDB *pdb, bool over)
 
     char date_str [MAX_DATE_LENGTH + 1];
     memset (date_str, 0, sizeof(date_str));
-    qof_print_date_buff (date_str, sizeof(date_str), date);
+    qof_print_date_buff (date_str, MAX_DATE_LENGTH, date);
     DEBUG("Date is %s, Commodity from is '%s', Currency is '%s', "
           "Amount is %s", date_str,
           gnc_commodity_get_fullname (*m_from_commodity),
@@ -332,7 +338,9 @@ Result GncImportPrice::create_price (QofBook* book, GNCPriceDB *pdb, bool over)
         gnc_price_set_commodity (price, *m_from_commodity);
         gnc_price_set_currency (price, *m_to_currency);
 
-        auto amount_conv = amount.convert<RoundType::half_up>(CURRENCY_DENOM);
+        int scu = gnc_commodity_get_fraction (*m_to_currency);
+        auto amount_conv = amount.convert<RoundType::half_up>(scu * COMMODITY_DENOM_MULT);
+
         gnc_price_set_value (price, static_cast<gnc_numeric>(amount_conv));
 
         gnc_price_set_time64 (price, date);

@@ -30,7 +30,6 @@
 
 #include <config.h>
 #include <glib.h>
-#include <glib/gprintf.h>
 #include <gdk/gdkkeysyms.h>
 
 #include "gnucash-sheet.h"
@@ -70,7 +69,7 @@ enum
 /** Static Globals *****************************************************/
 
 /* This static indicates the debugging module that this .o belongs to. */
-static QofLogModule log_module = GNC_MOD_REGISTER;
+static QofLogModule log_module = G_LOG_DOMAIN;
 static GtkLayout *sheet_parent_class;
 
 
@@ -79,34 +78,104 @@ static GtkLayout *sheet_parent_class;
 static void gnucash_sheet_start_editing_at_cursor (GnucashSheet *sheet);
 
 static gboolean gnucash_sheet_cursor_move (GnucashSheet *sheet,
-        VirtualLocation virt_loc);
+                                           VirtualLocation virt_loc);
 
 static void gnucash_sheet_deactivate_cursor_cell (GnucashSheet *sheet);
 static void gnucash_sheet_activate_cursor_cell (GnucashSheet *sheet,
-        gboolean changed_cells);
+                                                gboolean changed_cells);
 static void gnucash_sheet_stop_editing (GnucashSheet *sheet);
-static void gnucash_sheet_im_context_reset (GnucashSheet *sheet);
-static void gnucash_sheet_commit_cb (GtkIMContext *context, const gchar *str,
-                                     GnucashSheet *sheet);
-static void gnucash_sheet_preedit_changed_cb (GtkIMContext *context,
-        GnucashSheet *sheet);
-static gboolean gnucash_sheet_retrieve_surrounding_cb (GtkIMContext *context,
-        GnucashSheet *sheet);
-static gboolean gnucash_sheet_delete_surrounding_cb (GtkIMContext *context,
-        gint offset,
-        gint n_chars,
-        GnucashSheet *sheet);
-static gboolean gnucash_sheet_check_direct_update_cell(GnucashSheet *sheet,
-        const VirtualLocation virt_loc);
+static gboolean gnucash_sheet_check_direct_update_cell (GnucashSheet *sheet,
+                                                        const VirtualLocation virt_loc);
 gboolean gnucash_sheet_draw_cb (GtkWidget *widget, cairo_t *cr,
                                 G_GNUC_UNUSED gpointer data);
 
 /** Implementation *****************************************************/
 
-G_INLINE_FUNC gboolean
-gnucash_sheet_virt_cell_out_of_bounds (GnucashSheet *sheet,
-                                       VirtualCellLocation vcell_loc);
-gboolean
+
+/* gtk_editable_set_position sets both current_pos and selection_bound to the
+ * supplied value. gtk_editable_select_region(start, end) sets current_pos to
+ * end and selection_bound to start; if either is < 0 it's changed to length.
+ *
+ * That's a bit orthogonal to the way GncTable sees things, so the following
+ * functions translate between the two.
+ */
+
+static inline void
+gnucash_sheet_set_entry_selection (GnucashSheet *sheet)
+{
+    DEBUG("Set entry selection to sheet: %d:%d", sheet->bound, sheet->pos);
+    gtk_editable_select_region (GTK_EDITABLE(sheet->entry),
+                                sheet->bound, sheet->pos);
+}
+
+static inline void
+gnucash_sheet_set_selection_from_entry (GnucashSheet *sheet)
+{
+    gtk_editable_get_selection_bounds (GTK_EDITABLE(sheet->entry),
+                                       &sheet->bound, &sheet->pos);
+}
+
+static inline void
+gnucash_sheet_set_selection (GnucashSheet *sheet, int pos, int bound)
+{
+    DEBUG("Set sheet selection %d:%d", bound, pos);
+    sheet->pos = pos;
+    sheet->bound = bound;
+    gnucash_sheet_set_entry_selection (sheet);
+}
+
+// The variable names here are intended to match the GncTable usage.
+static inline void
+gnucash_sheet_set_position_and_selection (GnucashSheet* sheet, int pos,
+                                          int start, int end)
+{
+    if (pos == end || start == -1)
+        gnucash_sheet_set_selection (sheet, pos, start);
+    else if (pos == start || end == -1)
+        gnucash_sheet_set_selection (sheet, start, end);
+    else if (start == end)
+        gnucash_sheet_set_selection (sheet, pos, pos);
+    else
+        gnucash_sheet_set_selection (sheet, pos, end);
+}
+
+static inline void
+gnucash_sheet_set_position (GnucashSheet* sheet, int pos)
+{
+    gnucash_sheet_set_position_and_selection (sheet, pos, pos, pos);
+}
+
+static inline void
+gnucash_sheet_get_selection (GnucashSheet *sheet, int *start, int *end)
+{
+    *start = sheet->pos;
+    *end = sheet->bound;
+}
+
+static inline void
+gnucash_sheet_clear_selection (GnucashSheet *sheet)
+{
+    gnucash_sheet_set_selection (sheet, sheet->pos, sheet->pos);
+}
+
+static inline void
+gnucash_sheet_set_entry_value (GnucashSheet *sheet, const char* value)
+{
+    g_signal_handler_block (G_OBJECT(sheet->entry),
+                            sheet->insert_signal);
+    g_signal_handler_block (G_OBJECT(sheet->entry),
+                            sheet->delete_signal);
+
+    gtk_entry_set_text (GTK_ENTRY(sheet->entry), value);
+
+    g_signal_handler_unblock (G_OBJECT(sheet->entry),
+                              sheet->delete_signal);
+    g_signal_handler_unblock (G_OBJECT(sheet->entry),
+                              sheet->insert_signal);
+
+}
+
+static inline gboolean
 gnucash_sheet_virt_cell_out_of_bounds (GnucashSheet *sheet,
                                        VirtualCellLocation vcell_loc)
 {
@@ -123,7 +192,7 @@ gnucash_sheet_cell_valid (GnucashSheet *sheet, VirtualLocation virt_loc)
     SheetBlockStyle *style;
 
     valid = !gnucash_sheet_virt_cell_out_of_bounds (sheet,
-            virt_loc.vcell_loc);
+                                                    virt_loc.vcell_loc);
 
     if (valid)
     {
@@ -139,11 +208,11 @@ gnucash_sheet_cell_valid (GnucashSheet *sheet, VirtualLocation virt_loc)
 }
 
 
-void
+static void
 gnucash_sheet_cursor_set (GnucashSheet *sheet, VirtualLocation virt_loc)
 {
     g_return_if_fail (sheet != NULL);
-    g_return_if_fail (GNUCASH_IS_SHEET (sheet));
+    g_return_if_fail (GNUCASH_IS_SHEET(sheet));
 
     g_return_if_fail (virt_loc.vcell_loc.virt_row >= 0 ||
                       virt_loc.vcell_loc.virt_row <= sheet->num_virt_rows);
@@ -211,7 +280,6 @@ gnucash_sheet_stop_editing (GnucashSheet *sheet)
 {
     /* Rollback an uncommitted string if it exists   *
      * *before* disconnecting signal handlers.       */
-    gnucash_sheet_im_context_reset(sheet);
 
     if (sheet->insert_signal != 0)
         g_signal_handler_disconnect (G_OBJECT(sheet->entry),
@@ -219,24 +287,8 @@ gnucash_sheet_stop_editing (GnucashSheet *sheet)
     if (sheet->delete_signal != 0)
         g_signal_handler_disconnect (G_OBJECT(sheet->entry),
                                      sheet->delete_signal);
-    if (sheet->commit_signal != 0)
-        g_signal_handler_disconnect (G_OBJECT(sheet->im_context),
-                                     sheet->commit_signal);
-    if (sheet->preedit_changed_signal != 0)
-        g_signal_handler_disconnect (G_OBJECT(sheet->im_context),
-                                     sheet->preedit_changed_signal);
-    if (sheet->retrieve_surrounding_signal != 0)
-        g_signal_handler_disconnect (G_OBJECT(sheet->im_context),
-                                     sheet->retrieve_surrounding_signal);
-    if (sheet->delete_surrounding_signal != 0)
-        g_signal_handler_disconnect (G_OBJECT(sheet->im_context),
-                                     sheet->delete_surrounding_signal);
     sheet->insert_signal = 0;
     sheet->delete_signal = 0;
-    sheet->commit_signal = 0;
-    sheet->preedit_changed_signal = 0;
-    sheet->retrieve_surrounding_signal = 0;
-    sheet->delete_surrounding_signal = 0;
     sheet->direct_update_cell = FALSE;
 
     gnucash_sheet_hide_editing_cursor (sheet);
@@ -275,7 +327,7 @@ gnucash_sheet_set_text_bounds (GnucashSheet *sheet, GdkRectangle *rect,
 
 gint
 gnucash_sheet_get_text_offset (GnucashSheet *sheet, const VirtualLocation virt_loc,
-                                gint rect_width, gint logical_width)
+                               gint rect_width, gint logical_width)
 {
     GncItemEdit *item_edit = GNC_ITEM_EDIT(sheet->item_editor);
     Table *table = sheet->table;
@@ -301,47 +353,6 @@ gnucash_sheet_get_text_offset (GnucashSheet *sheet, const VirtualLocation virt_l
         break;
     }
     return x_offset;
-}
-
-static gint
-gnucash_sheet_get_text_cursor_position (GnucashSheet *sheet, const VirtualLocation virt_loc)
-{
-    GncItemEdit *item_edit = GNC_ITEM_EDIT(sheet->item_editor);
-    Table *table = sheet->table;
-    const char *text = gnc_table_get_entry (table, virt_loc);
-    PangoLayout *layout;
-    PangoRectangle logical_rect;
-    GdkRectangle rect;
-    gint x, y, width, height;
-    gint index, trailing;
-    gboolean result;
-    gint x_offset = 0;
-
-    if ((text == NULL) || (*text == '\0'))
-        return 0;
-
-    // Get the item_edit position
-    gnc_item_edit_get_pixel_coords (item_edit, &x, &y, &width, &height);
-
-    layout = gtk_widget_create_pango_layout (GTK_WIDGET (sheet), text);
-
-    // We don't need word wrap or line wrap
-    pango_layout_set_width (layout, -1);
-
-    pango_layout_get_pixel_extents (layout, NULL, &logical_rect);
-
-    gnucash_sheet_set_text_bounds (sheet, &rect, x, y, width, height);
-
-    x_offset = gnucash_sheet_get_text_offset (sheet, virt_loc,
-                                              rect.width, logical_rect.width);
-
-    pango_layout_xy_to_index (layout,
-                 PANGO_SCALE * (sheet->button_x - rect.x - x_offset),
-                 PANGO_SCALE * (height/2), &index, &trailing);
-
-    g_object_unref (layout);
-
-    return index + trailing;
 }
 
 static void
@@ -390,25 +401,57 @@ gnucash_sheet_activate_cursor_cell (GnucashSheet *sheet,
         gnucash_sheet_redraw_block (sheet, virt_loc.vcell_loc);
     else
     {
-        gnucash_sheet_im_context_reset(sheet);
+        gtk_entry_reset_im_context (GTK_ENTRY (sheet->entry));
         gnucash_sheet_start_editing_at_cursor (sheet);
 
         // Came here by keyboard, select text, otherwise text cursor to
         // mouse position
         if (sheet->button != 1)
         {
-            gtk_editable_set_position (editable, cursor_pos);
-            gtk_editable_select_region (editable, start_sel, end_sel);
+            gnucash_sheet_set_position_and_selection (sheet, cursor_pos,
+                                                      start_sel, end_sel);
         }
         else
-            gtk_editable_set_position (editable,
-                gnucash_sheet_get_text_cursor_position (sheet, virt_loc));
+        {
+            GncItemEdit *item_edit = GNC_ITEM_EDIT(sheet->item_editor);
+            Table *table = sheet->table;
+            const char *text = gnc_table_get_entry (table, virt_loc);
+            PangoLayout *layout;
+            PangoRectangle logical_rect;
+            GdkRectangle rect;
+            gint x, y, width, height;
+            gint index = 0, trailing = 0;
+            gboolean result;
+            gint x_offset = 0;
 
-        sheet->direct_update_cell =
-            gnucash_sheet_check_direct_update_cell (sheet, virt_loc);
+            if (text && *text)
+            {
+                // Get the item_edit position
+                gnc_item_edit_get_pixel_coords (item_edit, &x, &y,
+                                                &width, &height);
+                layout = gtk_widget_create_pango_layout (GTK_WIDGET (sheet),
+                                                         text);
+                // We don't need word wrap or line wrap
+                pango_layout_set_width (layout, -1);
+                pango_layout_get_pixel_extents (layout, NULL, &logical_rect);
+                gnucash_sheet_set_text_bounds (sheet, &rect, x, y,
+                                               width, height);
+                x_offset = gnucash_sheet_get_text_offset (sheet, virt_loc,
+                                                          rect.width,
+                                                          logical_rect.width);
+                pango_layout_xy_to_index (layout,
+                                          PANGO_SCALE * (sheet->button_x - rect.x - x_offset),
+                                          PANGO_SCALE * (height/2), &index, &trailing);
+                g_object_unref (layout);
+            }
+            gnucash_sheet_set_position (sheet, index + trailing);
+        }
+        sheet->direct_update_cell = gnucash_sheet_check_direct_update_cell (sheet, virt_loc);
     }
-
-    gtk_widget_grab_focus (GTK_WIDGET(sheet));
+    // when a gui refresh is called, we end up here so only grab the focus
+    // if the sheet is showing on the current plugin_page
+    if (sheet->sheet_has_focus)
+        gtk_widget_grab_focus (GTK_WIDGET(sheet));
 }
 
 
@@ -482,7 +525,6 @@ gnucash_sheet_y_pixel_to_block (GnucashSheet *sheet, int y)
         if (block->origin_y + block->style->dimensions->height > y)
             break;
     }
-
     return vcell_loc.virt_row;
 }
 
@@ -496,27 +538,24 @@ gnucash_sheet_compute_visible_range (GnucashSheet *sheet)
     gint height;
     gint cy;
     gint top_block;
-//    gint old_visible_blocks, old_visible_rows;
 
     g_return_if_fail (sheet != NULL);
-    g_return_if_fail (GNUCASH_IS_SHEET (sheet));
+    g_return_if_fail (GNUCASH_IS_SHEET(sheet));
 
     gtk_widget_get_allocation (GTK_WIDGET(sheet), &alloc);
     height = alloc.height;
 
     adj = gtk_scrollable_get_vadjustment (GTK_SCROLLABLE(sheet));
-    cy = gtk_adjustment_get_value(adj);
+    cy = gtk_adjustment_get_value (adj);
 
     top_block = gnucash_sheet_y_pixel_to_block (sheet, cy);
 
-//    old_visible_blocks = sheet->num_visible_blocks;
-//    old_visible_rows = sheet->num_visible_phys_rows;
     sheet->num_visible_blocks = 0;
     sheet->num_visible_phys_rows = 0;
 
-    for ( vcell_loc.virt_row = top_block, vcell_loc.virt_col = 0;
-            vcell_loc.virt_row < sheet->num_virt_rows;
-            vcell_loc.virt_row++ )
+    for (vcell_loc.virt_row = top_block, vcell_loc.virt_col = 0;
+         vcell_loc.virt_row < sheet->num_virt_rows;
+         vcell_loc.virt_row++)
     {
         SheetBlock *block;
 
@@ -555,16 +594,17 @@ gnucash_sheet_show_row (GnucashSheet *sheet, gint virt_row)
                               sheet->num_virt_rows - 1);
 
     adj = gtk_scrollable_get_hadjustment (GTK_SCROLLABLE(sheet));
-    cx = gtk_adjustment_get_value(adj);
+    cx = gtk_adjustment_get_value (adj);
     adj = gtk_scrollable_get_vadjustment (GTK_SCROLLABLE(sheet));
-    cy = gtk_adjustment_get_value(adj);
+    cy = gtk_adjustment_get_value (adj);
     x = cx;
 
     gtk_widget_get_allocation (GTK_WIDGET(sheet), &alloc);
     height = alloc.height;
 
     block = gnucash_sheet_get_block (sheet, vcell_loc);
-
+    if (!block)
+        return;
     y = block->origin_y;
     block_height = block->style->dimensions->height;
 
@@ -597,7 +637,7 @@ void
 gnucash_sheet_make_cell_visible (GnucashSheet *sheet, VirtualLocation virt_loc)
 {
     g_return_if_fail (sheet != NULL);
-    g_return_if_fail (GNUCASH_IS_SHEET (sheet));
+    g_return_if_fail (GNUCASH_IS_SHEET(sheet));
 
     if (!gnucash_sheet_cell_valid (sheet, virt_loc))
         return;
@@ -625,18 +665,18 @@ gnucash_sheet_show_range (GnucashSheet *sheet,
     g_return_if_fail (sheet != NULL);
     g_return_if_fail (GNUCASH_IS_SHEET(sheet));
 
-    start_loc.virt_row = MAX (start_loc.virt_row, 1);
-    start_loc.virt_row = MIN (start_loc.virt_row,
-                              sheet->num_virt_rows - 1);
+    start_loc.virt_row = MAX(start_loc.virt_row, 1);
+    start_loc.virt_row = MIN(start_loc.virt_row,
+                             sheet->num_virt_rows - 1);
 
-    end_loc.virt_row = MAX (end_loc.virt_row, 1);
-    end_loc.virt_row = MIN (end_loc.virt_row,
-                            sheet->num_virt_rows - 1);
+    end_loc.virt_row = MAX(end_loc.virt_row, 1);
+    end_loc.virt_row = MIN(end_loc.virt_row,
+                           sheet->num_virt_rows - 1);
 
     adj = gtk_scrollable_get_hadjustment (GTK_SCROLLABLE(sheet));
-    cx = gtk_adjustment_get_value(adj);
+    cx = gtk_adjustment_get_value (adj);
     adj = gtk_scrollable_get_vadjustment (GTK_SCROLLABLE(sheet));
-    cy = gtk_adjustment_get_value(adj);
+    cy = gtk_adjustment_get_value (adj);
     x = cx;
 
     gtk_widget_get_allocation (GTK_WIDGET(sheet), &alloc);
@@ -644,6 +684,8 @@ gnucash_sheet_show_range (GnucashSheet *sheet,
 
     start_block = gnucash_sheet_get_block (sheet, start_loc);
     end_block = gnucash_sheet_get_block (sheet, end_loc);
+    if (!(start_block && end_block))
+        return;
 
     y = start_block->origin_y;
     block_height = (end_block->origin_y +
@@ -656,7 +698,7 @@ gnucash_sheet_show_range (GnucashSheet *sheet,
     }
 
     if (y > cy)
-        y -= height - MIN (block_height, height);
+        y -= height - MIN(block_height, height);
 
     if ((sheet->height - y) < height)
         y = sheet->height - height;
@@ -680,7 +722,7 @@ gnucash_sheet_update_adjustments (GnucashSheet *sheet)
     GtkAdjustment *vadj;
 
     g_return_if_fail (sheet != NULL);
-    g_return_if_fail (GNUCASH_IS_SHEET (sheet));
+    g_return_if_fail (GNUCASH_IS_SHEET(sheet));
     g_return_if_fail (sheet->vadj != NULL);
 
     vadj = sheet->vadj;
@@ -695,7 +737,7 @@ gnucash_sheet_update_adjustments (GnucashSheet *sheet)
 
 static void
 gnucash_sheet_vadjustment_value_changed (GtkAdjustment *adj,
-        GnucashSheet *sheet)
+                                         GnucashSheet *sheet)
 {
     gnucash_sheet_compute_visible_range (sheet);
 }
@@ -707,7 +749,7 @@ gnucash_sheet_redraw_all (GnucashSheet *sheet)
     g_return_if_fail (sheet != NULL);
     g_return_if_fail (GNUCASH_IS_SHEET(sheet));
 
-    gtk_widget_queue_draw (GTK_WIDGET (sheet));
+    gtk_widget_queue_draw (GTK_WIDGET(sheet));
 
     g_signal_emit_by_name (sheet->reg, "redraw_all");
 }
@@ -740,8 +782,7 @@ gnucash_sheet_redraw_block (GnucashSheet *sheet, VirtualCellLocation vcell_loc)
 
     gtk_widget_get_allocation (GTK_WIDGET(sheet), &alloc);
     h = block->style->dimensions->height;
-    w = MIN(block->style->dimensions->width,
-            alloc.width);
+    w = MIN(block->style->dimensions->width, alloc.width);
 
     gtk_widget_queue_draw_area (GTK_WIDGET(sheet), x, y, w + 1, h + 1);
 }
@@ -754,12 +795,18 @@ gnucash_sheet_is_read_only (GnucashSheet *sheet)
     return gnc_table_model_read_only (sheet->table->model);
 }
 
+void
+gnucash_sheet_set_has_focus (GnucashSheet *sheet, gboolean has_focus)
+{
+    sheet->sheet_has_focus = has_focus;
+}
+
 static void
 gnucash_sheet_finalize (GObject *object)
 {
     GnucashSheet *sheet;
 
-    sheet = GNUCASH_SHEET (object);
+    sheet = GNUCASH_SHEET(object);
 
     g_table_resize (sheet->blocks, 0, 0);
     g_table_destroy (sheet->blocks);
@@ -770,12 +817,8 @@ gnucash_sheet_finalize (GObject *object)
     g_hash_table_destroy (sheet->cursor_styles);
     g_hash_table_destroy (sheet->dimensions_hash_table);
 
-    if (G_OBJECT_CLASS (sheet_parent_class)->finalize)
-        (*G_OBJECT_CLASS (sheet_parent_class)->finalize)(object);
-
-    /* Clean up IMContext and unref */
-    gnucash_sheet_im_context_reset(sheet);
-    g_object_unref (sheet->im_context);
+    if (G_OBJECT_CLASS(sheet_parent_class)->finalize)
+        (*G_OBJECT_CLASS(sheet_parent_class)->finalize)(object);
 }
 
 
@@ -792,10 +835,10 @@ gnucash_sheet_create (Table *table)
     sheet->vadj = gtk_scrollable_get_vadjustment (GTK_SCROLLABLE(sheet));
     sheet->hadj = gtk_scrollable_get_hadjustment (GTK_SCROLLABLE(sheet));
 
-    g_signal_connect (G_OBJECT (sheet->vadj), "value_changed",
-                      G_CALLBACK (gnucash_sheet_vadjustment_value_changed), sheet);
-    g_signal_connect (G_OBJECT (sheet), "draw",
-                      G_CALLBACK (gnucash_sheet_draw_cb), sheet);
+    g_signal_connect (G_OBJECT(sheet->vadj), "value_changed",
+                      G_CALLBACK(gnucash_sheet_vadjustment_value_changed), sheet);
+    g_signal_connect (G_OBJECT(sheet), "draw",
+                      G_CALLBACK(gnucash_sheet_draw_cb), sheet);
 
     LEAVE("%p", sheet);
     return sheet;
@@ -845,13 +888,11 @@ gnucash_sheet_modify_current_cell (GnucashSheet *sheet, const gchar *new_text)
     GtkEditable *editable;
     Table *table = sheet->table;
     VirtualLocation virt_loc;
-    int new_text_len;
-
+    int new_text_len = 0;
     const char *retval;
-
     int cursor_position, start_sel, end_sel;
 
-    gnucash_cursor_get_virt(GNUCASH_CURSOR(sheet->cursor), &virt_loc);
+    gnucash_cursor_get_virt (GNUCASH_CURSOR(sheet->cursor), &virt_loc);
 
     if (!gnc_table_virtual_loc_valid (table, virt_loc, TRUE))
         return NULL;
@@ -864,7 +905,8 @@ gnucash_sheet_modify_current_cell (GnucashSheet *sheet, const gchar *new_text)
     cursor_position = gtk_editable_get_position (editable);
     gtk_editable_get_selection_bounds (editable, &start_sel, &end_sel);
 
-    new_text_len = strlen (new_text);
+    if (new_text)
+         new_text_len = strlen (new_text);
 
     retval = gnc_table_modify_update (table, virt_loc,
                                       new_text, new_text_len,
@@ -876,22 +918,11 @@ gnucash_sheet_modify_current_cell (GnucashSheet *sheet, const gchar *new_text)
 
     if (retval)
     {
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->insert_signal);
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->delete_signal);
-
-        gtk_entry_set_text (GTK_ENTRY (sheet->entry), retval);
-
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->delete_signal);
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->insert_signal);
+        DEBUG("%s", retval ? retval : "nothing");
+        gnucash_sheet_set_entry_value (sheet, retval);
+        gnucash_sheet_set_position_and_selection (sheet, cursor_position,
+                                                  start_sel, end_sel);
     }
-
-    gtk_editable_set_position (editable, cursor_position);
-    gtk_editable_select_region(editable, start_sel, end_sel);
-
     return retval;
 }
 
@@ -903,37 +934,141 @@ typedef struct
 
 } select_info;
 
+static gboolean
+gnucash_sheet_direct_event (GnucashSheet *sheet, GdkEvent *event)
+{
+    GtkEditable *editable;
+    Table *table = sheet->table;
+    VirtualLocation virt_loc;
+    gboolean result;
+    char *new_text = NULL;
+    int cursor_position, start_sel, end_sel;
+    int new_position, new_start, new_end;
+
+    gnucash_cursor_get_virt (GNUCASH_CURSOR(sheet->cursor), &virt_loc);
+
+    if (!gnc_table_virtual_loc_valid (table, virt_loc, TRUE))
+        return FALSE;
+
+    if (gnc_table_model_read_only (table->model))
+        return FALSE;
+
+    editable = GTK_EDITABLE(sheet->entry);
+
+    cursor_position = gtk_editable_get_position (editable);
+    gtk_editable_get_selection_bounds (editable, &start_sel, &end_sel);
+
+    new_position = cursor_position;
+    new_start = start_sel;
+    new_end = end_sel;
+    result = gnc_table_direct_update (table, virt_loc,
+                                      &new_text,
+                                      &new_position,
+                                      &new_start, &new_end,
+                                      event);
+    if (result)
+    {
+        DEBUG("%s", new_text ? new_text : "nothing");
+        if (new_text != NULL)
+            gnucash_sheet_set_entry_value (sheet, new_text);
+        gnucash_sheet_set_position_and_selection (sheet, new_position,
+                                                  new_start, new_end);
+    }
+    return result;
+}
+
+static inline void
+normalize_selection_bounds (int *pos, int *bound, int length)
+{
+    *bound = *bound < 0 ? length : *bound;
+    *pos = *pos < 0 ? length : *pos;
+
+    if (*pos > *bound)
+    {
+        int temp = *pos;
+        *pos = *bound;
+        *bound = temp;
+    }
+}
+
+static inline char*
+insert_text (const char* old_text, const char* new_text, int pos, int bound)
+{
+    int old_len = g_utf8_strlen (old_text, -1);
+    char* begin = g_utf8_substring (old_text, 0, pos);
+    char* end = g_utf8_substring (old_text, bound, old_len);
+    char *retval = g_strdup_printf ("%s%s%s", begin, new_text, end);
+    g_free (begin);
+    g_free (end);
+    return retval;
+}
+
+static char*
+make_new_text (GnucashSheet *sheet, const char* new_text, int *position)
+{
+    GtkEditable* editable = (GTK_EDITABLE(sheet->entry));
+    int pos, bound;
+    const char* old_text = gtk_entry_get_text (GTK_ENTRY(sheet->entry));
+    int old_length = g_utf8_strlen (old_text, -1);
+    int insert_length = g_utf8_strlen (new_text, -1);
+
+    if (!old_text || old_length == 0)
+    {
+        *position = insert_length;
+        return g_strdup (new_text);
+    }
+
+    gtk_editable_get_selection_bounds (editable, &bound, &pos);
+    normalize_selection_bounds (&pos, &bound, old_length);
+
+    if (*position != pos)
+        bound = pos = *position;
+
+    if (pos == 0 && bound == old_length) // Full replacement
+    {
+        *position = insert_length;
+        return g_strdup (new_text);
+    }
+
+    if (pos == bound)
+    {
+        if (pos == 0) //prepend
+        {
+            *position = insert_length;
+            return g_strdup_printf ("%s%s", new_text, old_text);
+        }
+        else if (pos == old_length) //append
+        {
+            *position = old_length + insert_length;
+            return g_strdup_printf ("%s%s", old_text, new_text);
+        }
+    }
+
+    *position = pos + insert_length;
+    return insert_text (old_text, new_text, pos, bound);
+}
+
 static void
-gnucash_sheet_insert_cb (GtkWidget *widget,
+gnucash_sheet_insert_cb (GtkEditable *editable,
                          const gchar *insert_text,
                          const gint insert_text_len,
                          gint *position,
                          GnucashSheet *sheet)
 {
-    GtkEditable *editable;
+
     Table *table = sheet->table;
     VirtualLocation virt_loc;
-
-    char *change_text;
-    GString *change_text_gs;
-
-    int new_text_len;
-    int change_text_len;
-
-    const char *old_text;
+    char *new_text = NULL;
+    glong new_text_len = 0;
     const char *retval;
-    char *new_text;
-    GString *new_text_gs;
+    int start_sel = 0, end_sel = 0;
+    int old_position = *position;
+    const char* old_text = gtk_entry_get_text (GTK_ENTRY(sheet->entry));
 
-    int start_sel, end_sel;
-    int old_position;
-    int i;
-    const char *c;
-    gunichar uc;
-
+    g_assert (GTK_WIDGET(editable) == sheet->entry);
     if (sheet->input_cancelled)
     {
-        g_signal_stop_emission_by_name (G_OBJECT (sheet->entry),
+        g_signal_stop_emission_by_name (G_OBJECT(sheet->entry),
                                         "insert_text");
         return;
     }
@@ -949,106 +1084,73 @@ gnucash_sheet_insert_cb (GtkWidget *widget,
     if (gnc_table_model_read_only (table->model))
         return;
 
-    change_text_gs = g_string_new_len (insert_text, insert_text_len);
+    new_text = make_new_text (sheet, insert_text, position);
+    new_text_len = strlen (new_text);
 
-    old_text = gtk_entry_get_text (GTK_ENTRY(sheet->entry));
-    if (old_text == NULL)
-        old_text = "";
-
-    old_position = *position;
-
-    /* we set new_text_gs to what the entry contents would be if
-       the insert was processed */
-    new_text_gs = g_string_new ("");
-
-    i = 0;
-    c = old_text;
-    //Copy old text up to insert position
-    while (*c && (i < old_position))
-    {
-        uc = g_utf8_get_char (c);
-        g_string_append_unichar (new_text_gs, uc);
-        c = g_utf8_next_char (c);
-        i++;
-    }
-
-    //Copy inserted text
-    g_string_append (new_text_gs, change_text_gs->str);
-
-    //Copy old text after insert position
-    while (*c)
-    {
-        uc = g_utf8_get_char (c);
-        g_string_append_unichar (new_text_gs, uc);
-        c = g_utf8_next_char (c);
-    }
-
-    new_text = new_text_gs->str;
-    new_text_len = new_text_gs->len;
-
-    change_text = change_text_gs->str;
-    change_text_len = change_text_gs->len;
-
-    editable = GTK_EDITABLE (sheet->entry);
-
-    gtk_editable_get_selection_bounds (editable, &start_sel, &end_sel);
 
     retval = gnc_table_modify_update (table, virt_loc,
-                                      change_text, change_text_len,
+                                      insert_text, insert_text_len,
                                       new_text, new_text_len,
                                       position, &start_sel, &end_sel,
                                       &sheet->input_cancelled);
 
-    if (retval &&
-            ((strcmp (retval, new_text) != 0) ||
-             (*position != old_position)))
+    if (retval)
     {
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->insert_signal);
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->delete_signal);
+        /* After the insert event the GtkEntry may handle signals from the
+         * IMContext that would reset the selection, and we may need to keep it
+         * so save it in the sheet values.
+         */
+        DEBUG("%s, got %s", new_text, retval);
+        gnucash_sheet_set_position_and_selection (sheet, *position, start_sel,
+                                                  end_sel);
 
-        gtk_entry_set_text (GTK_ENTRY (sheet->entry), retval);
-
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->delete_signal);
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->insert_signal);
-
-        g_signal_stop_emission_by_name (G_OBJECT(sheet->entry),
-                                        "insert_text");
+        if ((strcmp (retval, new_text) != 0) || (*position != old_position))
+        {
+            gnucash_sheet_set_entry_value (sheet, retval);
+            g_signal_stop_emission_by_name (G_OBJECT(sheet->entry),
+                                            "insert_text");
+        }
     }
     else if (retval == NULL)
     {
         retval = old_text;
 
-        /* reset IMContext if disallowed chars and clear preedit*/
-        gnucash_sheet_im_context_reset(sheet);
+        /* reset IMContext if disallowed chars */
+        gtk_entry_reset_im_context (GTK_ENTRY(sheet->entry));
         /* the entry was disallowed, so we stop the insert signal */
-        g_signal_stop_emission_by_name (G_OBJECT (sheet->entry),
+        g_signal_stop_emission_by_name (G_OBJECT(sheet->entry),
                                         "insert_text");
     }
-
-    /* sync cursor position and selection to preedit if it exists */
-    if (sheet->preedit_length)
-    {
-        gtk_editable_set_position (editable,
-                                   sheet->preedit_start_position
-                                   + sheet->preedit_cursor_position);
-    }
-    else if (*position < 0)
-        *position = g_utf8_strlen(retval, -1);
-
-    if (start_sel != end_sel)
-        gtk_editable_select_region(editable, start_sel, end_sel);
-    /* Save the selected region in case the input module eats it. */
-    sheet->start_sel = start_sel;
-    sheet->end_sel = end_sel;
-
-    g_string_free (new_text_gs, TRUE);
-    g_string_free (change_text_gs, TRUE);
 }
 
+static char*
+delete_text (GnucashSheet *sheet, int pos, int bound)
+{
+    const char* old_text = gtk_entry_get_text (GTK_ENTRY(sheet->entry));
+    int old_length = g_utf8_strlen (old_text, -1);
+    char* begin, *end;
+    char *retval = NULL;
+
+    normalize_selection_bounds (&pos, &bound, old_length);
+    if (pos == bound)
+        return g_strdup (old_text); // Nothing to delete.
+
+    if (pos == 0 && bound == old_length) // Full delete
+        return g_strdup ("");
+
+    if (bound == old_length)
+        return g_utf8_substring (old_text, 0, pos);
+
+    if (pos == 0)
+        return g_utf8_substring (old_text, bound, old_length);
+
+    begin = g_utf8_substring (old_text, 0, pos);
+    end = g_utf8_substring (old_text, bound, old_length);
+    retval = g_strdup_printf ("%s%s", begin, end);
+    g_free (begin);
+    g_free (end);
+    return retval;
+}
 
 static void
 gnucash_sheet_delete_cb (GtkWidget *widget,
@@ -1059,24 +1161,13 @@ gnucash_sheet_delete_cb (GtkWidget *widget,
     GtkEditable *editable;
     Table *table = sheet->table;
     VirtualLocation virt_loc;
-
-    int new_text_len;
-
-    const char *old_text;
+    char *new_text = NULL;
+    glong new_text_len;
     const char *retval;
-    char *new_text;
-    GString *new_text_gs;
-
     int cursor_position = start_pos;
     int start_sel, end_sel;
-    int i;
-    const char *c;
-    gunichar uc;
 
-    if (end_pos <= start_pos)
-        return;
-
-    gnucash_cursor_get_virt (GNUCASH_CURSOR (sheet->cursor), &virt_loc);
+    gnucash_cursor_get_virt (GNUCASH_CURSOR(sheet->cursor), &virt_loc);
 
     if (!gnc_table_virtual_loc_valid (table, virt_loc, FALSE))
         return;
@@ -1084,36 +1175,10 @@ gnucash_sheet_delete_cb (GtkWidget *widget,
     if (gnc_table_model_read_only (table->model))
         return;
 
-    old_text = gtk_entry_get_text (GTK_ENTRY(sheet->entry));
-    if (!old_text)
-        old_text = "";
-
-    new_text_gs = g_string_new ("");
-    i = 0;
-    c = old_text;
-    while (*c && (i < start_pos))
-    {
-        uc = g_utf8_get_char (c);
-        g_string_append_unichar (new_text_gs, uc);
-        c = g_utf8_next_char (c);
-        i++;
-    }
-
-    c = g_utf8_offset_to_pointer (old_text, end_pos);
-    while (*c)
-    {
-        uc = g_utf8_get_char (c);
-        g_string_append_unichar (new_text_gs, uc);
-        c = g_utf8_next_char (c);
-    }
-
-    new_text = new_text_gs->str;
-    new_text_len = new_text_gs->len;
-
-    editable = GTK_EDITABLE (sheet->entry);
-
+    new_text = delete_text (sheet, start_pos, end_pos);
+    new_text_len = strlen (new_text);
+    editable = GTK_EDITABLE(sheet->entry);
     gtk_editable_get_selection_bounds (editable, &start_sel, &end_sel);
-
     retval = gnc_table_modify_update (table, virt_loc,
                                       NULL, 0,
                                       new_text, new_text_len,
@@ -1121,54 +1186,30 @@ gnucash_sheet_delete_cb (GtkWidget *widget,
                                       &start_sel, &end_sel,
                                       &sheet->input_cancelled);
 
-    if (retval && (strcmp (retval, new_text) != 0))
-    {
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->insert_signal);
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->delete_signal);
+    if (retval)
+        gnucash_sheet_set_entry_value (sheet, retval);
 
-        gtk_entry_set_text (GTK_ENTRY (sheet->entry), retval);
+    g_signal_stop_emission_by_name (G_OBJECT(sheet->entry), "delete_text");
 
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->delete_signal);
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->insert_signal);
-
-        g_signal_stop_emission_by_name (G_OBJECT(sheet->entry),
-                                        "delete_text");
-    }
-    else if (retval == NULL)
-    {
-        /* the entry was disallowed, so we stop the delete signal */
-        g_signal_stop_emission_by_name (G_OBJECT(sheet->entry),
-                                        "delete_text");
-    }
-
-    gtk_editable_set_position (editable, cursor_position);
-
-    if (start_sel != end_sel)
-        gtk_editable_select_region (editable, start_sel, end_sel);
-
-    g_string_free (new_text_gs, TRUE);
+    DEBUG("%s", retval ? retval : "nothing");
+    gnucash_sheet_set_position_and_selection (sheet, cursor_position,
+                                              start_sel, end_sel);
 }
 
 gboolean
 gnucash_sheet_draw_cb (GtkWidget *widget, cairo_t *cr, G_GNUC_UNUSED gpointer data)
 {
-    GnucashSheet *sheet = GNUCASH_SHEET (widget);
+    GnucashSheet *sheet = GNUCASH_SHEET(widget);
     GtkStyleContext *context = gtk_widget_get_style_context (widget);
     GtkAllocation alloc;
-    gboolean result; //FIXME
 
-    gtk_widget_get_allocation(widget, &alloc);
+    gtk_widget_get_allocation (widget, &alloc);
 
     gtk_style_context_save (context);
     gtk_style_context_add_class (context, GTK_STYLE_CLASS_BACKGROUND);
     gtk_render_background (context, cr, 0, 0, alloc.width, alloc.height);
     gtk_style_context_restore (context);
 
-//FIXME what should be done with result being TRUE or FALSE
     gnucash_sheet_draw_internal (sheet, cr, &alloc);
     gnucash_sheet_draw_cursor (sheet->cursor, cr);
 
@@ -1184,7 +1225,7 @@ gnucash_sheet_size_allocate (GtkWidget *widget, GtkAllocation *allocation)
     ENTER("widget=%p, allocation=%p", widget, allocation);
 
     if (GTK_WIDGET_CLASS(sheet_parent_class)->size_allocate)
-        (*GTK_WIDGET_CLASS (sheet_parent_class)->size_allocate)
+        (*GTK_WIDGET_CLASS(sheet_parent_class)->size_allocate)
         (widget, allocation);
 
     if (allocation->height == sheet->window_height &&
@@ -1203,7 +1244,7 @@ gnucash_sheet_size_allocate (GtkWidget *widget, GtkAllocation *allocation)
     sheet->window_height = allocation->height;
     sheet->window_width  = allocation->width;
 
-    gnucash_cursor_configure (GNUCASH_CURSOR (sheet->cursor));
+    gnucash_cursor_configure (GNUCASH_CURSOR(sheet->cursor));
     gnc_header_reconfigure (GNC_HEADER(sheet->header_item));
     gnucash_sheet_set_scroll_region (sheet);
 
@@ -1217,8 +1258,7 @@ gnucash_sheet_size_allocate (GtkWidget *widget, GtkAllocation *allocation)
         virt_loc = sheet->table->current_cursor_loc;
 
         if (gnucash_sheet_cell_valid (sheet, virt_loc))
-            gnucash_sheet_show_row (sheet,
-                                    virt_loc.vcell_loc.virt_row);
+            gnucash_sheet_show_row (sheet, virt_loc.vcell_loc.virt_row);
     }
     gnc_header_request_redraw (GNC_HEADER(sheet->header_item));
     LEAVE(" ");
@@ -1230,15 +1270,10 @@ gnucash_sheet_focus_in_event (GtkWidget *widget, GdkEventFocus *event)
     GnucashSheet *sheet = GNUCASH_SHEET(widget);
 
     if (GTK_WIDGET_CLASS(sheet_parent_class)->focus_in_event)
-        (*GTK_WIDGET_CLASS (sheet_parent_class)->focus_in_event)
+        (*GTK_WIDGET_CLASS(sheet_parent_class)->focus_in_event)
         (widget, event);
 
     gnc_item_edit_focus_in (GNC_ITEM_EDIT(sheet->item_editor));
-    gtk_im_context_focus_in(sheet->im_context);
-
-#ifdef G_OS_WIN32
-    gnucash_sheet_im_context_reset(sheet);
-#endif /* G_OS_WIN32 */
 
     return FALSE;
 }
@@ -1249,21 +1284,16 @@ gnucash_sheet_focus_out_event (GtkWidget *widget, GdkEventFocus *event)
     GnucashSheet *sheet = GNUCASH_SHEET(widget);
 
     if (GTK_WIDGET_CLASS(sheet_parent_class)->focus_out_event)
-        (*GTK_WIDGET_CLASS (sheet_parent_class)->focus_out_event)
+        (*GTK_WIDGET_CLASS(sheet_parent_class)->focus_out_event)
         (widget, event);
 
-#ifdef G_OS_WIN32
-    gnucash_sheet_im_context_reset(sheet);
-#endif /* G_OS_WIN32 */
-
-    gtk_im_context_focus_out (sheet->im_context);
     gnc_item_edit_focus_out (GNC_ITEM_EDIT(sheet->item_editor));
     return FALSE;
 }
 
 static gboolean
-gnucash_sheet_check_direct_update_cell(GnucashSheet *sheet,
-                                       const VirtualLocation virt_loc)
+gnucash_sheet_check_direct_update_cell (GnucashSheet *sheet,
+                                        const VirtualLocation virt_loc)
 {
     const gchar *type_name;
 
@@ -1285,14 +1315,14 @@ gnucash_sheet_start_editing_at_cursor (GnucashSheet *sheet)
     VirtualLocation virt_loc;
 
     g_return_if_fail (sheet != NULL);
-    g_return_if_fail (GNUCASH_IS_SHEET (sheet));
+    g_return_if_fail (GNUCASH_IS_SHEET(sheet));
 
     gnucash_cursor_get_virt (GNUCASH_CURSOR(sheet->cursor), &virt_loc);
 
     text = gnc_table_get_entry (sheet->table, virt_loc);
 
     gnc_item_edit_configure (GNC_ITEM_EDIT(sheet->item_editor));
-    gtk_widget_show (GTK_WIDGET (sheet->item_editor));
+    gtk_widget_show (GTK_WIDGET(sheet->item_editor));
 
     gtk_entry_set_text (GTK_ENTRY(sheet->entry), text);
 
@@ -1300,28 +1330,11 @@ gnucash_sheet_start_editing_at_cursor (GnucashSheet *sheet)
 
     /* set up the signals */
     sheet->insert_signal =
-        g_signal_connect(G_OBJECT(sheet->entry), "insert_text",
-                         G_CALLBACK(gnucash_sheet_insert_cb), sheet);
+        g_signal_connect (G_OBJECT(sheet->entry), "insert_text",
+                          G_CALLBACK(gnucash_sheet_insert_cb), sheet);
     sheet->delete_signal =
-        g_signal_connect(G_OBJECT(sheet->entry), "delete_text",
-                         G_CALLBACK(gnucash_sheet_delete_cb), sheet);
-
-    sheet->commit_signal =
-        g_signal_connect (G_OBJECT (sheet->im_context), "commit",
-                          G_CALLBACK (gnucash_sheet_commit_cb), sheet);
-    sheet->preedit_changed_signal =
-        g_signal_connect (G_OBJECT (sheet->im_context), "preedit_changed",
-                          G_CALLBACK (gnucash_sheet_preedit_changed_cb),
-                          sheet);
-    sheet->retrieve_surrounding_signal =
-        g_signal_connect (G_OBJECT (sheet->im_context),
-                          "retrieve_surrounding",
-                          G_CALLBACK (gnucash_sheet_retrieve_surrounding_cb),
-                          sheet);
-    sheet->delete_surrounding_signal =
-        g_signal_connect (G_OBJECT (sheet->im_context), "delete_surrounding",
-                          G_CALLBACK (gnucash_sheet_delete_surrounding_cb),
-                          sheet);
+        g_signal_connect (G_OBJECT(sheet->entry), "delete_text",
+                          G_CALLBACK(gnucash_sheet_delete_cb), sheet);
 }
 
 static gboolean
@@ -1329,11 +1342,11 @@ gnucash_sheet_button_release_event (GtkWidget *widget, GdkEventButton *event)
 {
     GnucashSheet *sheet;
 
-    g_return_val_if_fail(widget != NULL, TRUE);
-    g_return_val_if_fail(GNUCASH_IS_SHEET(widget), TRUE);
-    g_return_val_if_fail(event != NULL, TRUE);
+    g_return_val_if_fail (widget != NULL, TRUE);
+    g_return_val_if_fail (GNUCASH_IS_SHEET(widget), TRUE);
+    g_return_val_if_fail (event != NULL, TRUE);
 
-    sheet = GNUCASH_SHEET (widget);
+    sheet = GNUCASH_SHEET(widget);
 
     if (sheet->button != event->button)
         return FALSE;
@@ -1356,11 +1369,11 @@ gnucash_scroll_event (GtkWidget *widget, GdkEventScroll *event)
     GtkAdjustment *vadj;
     gfloat v_value;
 
-    g_return_val_if_fail(widget != NULL, TRUE);
-    g_return_val_if_fail(GNUCASH_IS_SHEET(widget), TRUE);
-    g_return_val_if_fail(event != NULL, TRUE);
+    g_return_val_if_fail (widget != NULL, TRUE);
+    g_return_val_if_fail (GNUCASH_IS_SHEET(widget), TRUE);
+    g_return_val_if_fail (event != NULL, TRUE);
 
-    sheet = GNUCASH_SHEET (widget);
+    sheet = GNUCASH_SHEET(widget);
     vadj = sheet->vadj;
     v_value = gtk_adjustment_get_value (vadj);
 
@@ -1384,12 +1397,13 @@ gnucash_scroll_event (GtkWidget *widget, GdkEventScroll *event)
     v_value = CLAMP(v_value, gtk_adjustment_get_lower (vadj),
               gtk_adjustment_get_upper (vadj) - gtk_adjustment_get_page_size (vadj));
 
-    gtk_adjustment_set_value(vadj, v_value);
+    gtk_adjustment_set_value (vadj, v_value);
 
     if (event->delta_y == 0)
     {
-        // There are problems with the slider not tracking the value so
-        // when delta_y is 0 hide and showing the scrollbar seems to fix it
+        /* There are problems with the slider not tracking the value so
+           when delta_y is 0 hide and showing the scrollbar seems to fix it
+           observed when using mouse wheel on sheet after a page-up or down */
         gtk_widget_hide (GTK_WIDGET(sheet->vscrollbar));
         gtk_widget_show (GTK_WIDGET(sheet->vscrollbar));
     }
@@ -1401,25 +1415,18 @@ gnucash_sheet_check_grab (GnucashSheet *sheet)
 {
     GdkModifierType mods;
     GdkDevice *device;
-#if GTK_CHECK_VERSION(3,20,0)
     GdkSeat *seat;
-#else
-    GdkDeviceManager *device_manager;
-#endif
+    GdkWindow *window;
 
     if (!sheet->grabbed)
         return;
 
-#if GTK_CHECK_VERSION(3,20,0)
-    seat = gdk_display_get_default_seat (gdk_display_get_default());
-    device = gdk_seat_get_pointer (seat);
-#else
-    device_manager = gdk_display_get_device_manager (gdk_display_get_default());
-    device = gdk_device_manager_get_client_pointer (device_manager);
-#endif
+    window = gtk_widget_get_window (GTK_WIDGET(sheet));
 
-    gdk_device_get_state (device, gtk_widget_get_window (GTK_WIDGET(sheet)),
-                          0, &mods);
+    seat = gdk_display_get_default_seat (gdk_window_get_display (window));
+    device = gdk_seat_get_pointer (seat);
+
+    gdk_device_get_state (device, window, 0, &mods);
 
     if (!(mods & GDK_BUTTON1_MASK))
     {
@@ -1433,21 +1440,18 @@ gnucash_sheet_button_press_event (GtkWidget *widget, GdkEventButton *event)
 {
     GnucashSheet *sheet;
     VirtualCell *vcell;
-    gboolean changed_cells; //FIXME
-
     VirtualLocation cur_virt_loc;
     VirtualLocation new_virt_loc;
-
     Table *table;
     gboolean abort_move;
     gboolean button_1;
     gboolean do_popup;
 
-    g_return_val_if_fail(widget != NULL, TRUE);
-    g_return_val_if_fail(GNUCASH_IS_SHEET(widget), TRUE);
-    g_return_val_if_fail(event != NULL, TRUE);
+    g_return_val_if_fail (widget != NULL, TRUE);
+    g_return_val_if_fail (GNUCASH_IS_SHEET(widget), TRUE);
+    g_return_val_if_fail (event != NULL, TRUE);
 
-    sheet = GNUCASH_SHEET (widget);
+    sheet = GNUCASH_SHEET(widget);
     table = sheet->table;
 
     if (sheet->button && (sheet->button != event->button))
@@ -1457,8 +1461,8 @@ gnucash_sheet_button_press_event (GtkWidget *widget, GdkEventButton *event)
     if (sheet->button == 3)
         sheet->button = 0;
 
-    if (!gtk_widget_has_focus(widget))
-        gtk_widget_grab_focus(widget);
+    if (!gtk_widget_has_focus (widget))
+        gtk_widget_grab_focus (widget);
 
     button_1 = FALSE;
     do_popup = FALSE;
@@ -1485,8 +1489,8 @@ gnucash_sheet_button_press_event (GtkWidget *widget, GdkEventButton *event)
     sheet->button_x = -1;
     sheet->button_y = -1;
 
-    if (!gnucash_sheet_find_loc_by_pixel(sheet,
-                                        event->x, event->y, &new_virt_loc))
+    if (!gnucash_sheet_find_loc_by_pixel (sheet, event->x, event->y,
+                                          &new_virt_loc))
         return TRUE;
 
     sheet->button_x = event->x;
@@ -1501,20 +1505,14 @@ gnucash_sheet_button_press_event (GtkWidget *widget, GdkEventButton *event)
 
     if (button_1)
     {
-        gtk_grab_add(widget);
+        gtk_grab_add (widget);
         sheet->grabbed = TRUE;
     }
 
     if (virt_loc_equal (new_virt_loc, cur_virt_loc) &&
         sheet->editing && do_popup)
     {
-#if GTK_CHECK_VERSION(3,22,0)
         gtk_menu_popup_at_pointer (GTK_MENU(sheet->popup), (GdkEvent *) event);
-#else
-        gtk_menu_popup(GTK_MENU(sheet->popup), NULL, NULL, NULL,
-                       sheet->popup_data, event->button, event->time);
-#endif
-
         return TRUE;
     }
 
@@ -1530,34 +1528,36 @@ gnucash_sheet_button_press_event (GtkWidget *widget, GdkEventButton *event)
     if (abort_move)
         return TRUE;
 
-//FIXME does something need to be done if changed_cells is true or false ?
     gnucash_sheet_cursor_move (sheet, new_virt_loc);
+
+    // if clicked in ocument link cell, run call back
+    if (g_strcmp0 (gnc_table_get_cell_name (table, new_virt_loc), DOCLINK_CELL) == 0)
+    {
+        if (sheet->open_doclink_cb)
+            (sheet->open_doclink_cb)(sheet->open_doclink_cb_data, NULL);
+    }
 
     if (button_1)
         gnucash_sheet_check_grab (sheet);
 
     if (do_popup)
-#if GTK_CHECK_VERSION(3,22,0)
         gtk_menu_popup_at_pointer (GTK_MENU(sheet->popup), (GdkEvent *) event);
-#else
-        gtk_menu_popup(GTK_MENU(sheet->popup), NULL, NULL, NULL,
-                       sheet->popup_data, event->button, event->time);
-#endif
+
     return button_1 || do_popup;
 }
 
 void
 gnucash_sheet_refresh_from_prefs (GnucashSheet *sheet)
 {
-    g_return_if_fail(sheet != NULL);
-    g_return_if_fail(GNUCASH_IS_SHEET(sheet));
+    g_return_if_fail (sheet != NULL);
+    g_return_if_fail (GNUCASH_IS_SHEET(sheet));
 
     sheet->use_gnc_color_theme = gnc_prefs_get_bool (GNC_PREFS_GROUP_GENERAL_REGISTER,
                                                      GNC_PREF_USE_GNUCASH_COLOR_THEME);
-    sheet->use_horizontal_lines = gnc_prefs_get_bool(GNC_PREFS_GROUP_GENERAL_REGISTER,
-                                                     GNC_PREF_DRAW_HOR_LINES);
-    sheet->use_vertical_lines = gnc_prefs_get_bool(GNC_PREFS_GROUP_GENERAL_REGISTER,
-                                                   GNC_PREF_DRAW_VERT_LINES);
+    sheet->use_horizontal_lines = gnc_prefs_get_bool (GNC_PREFS_GROUP_GENERAL_REGISTER,
+                                                      GNC_PREF_DRAW_HOR_LINES);
+    sheet->use_vertical_lines = gnc_prefs_get_bool (GNC_PREFS_GROUP_GENERAL_REGISTER,
+                                                    GNC_PREF_DRAW_VERT_LINES);
 }
 
 static gboolean
@@ -1574,7 +1574,7 @@ gnucash_sheet_clipboard_event (GnucashSheet *sheet, GdkEventKey *event)
     case GDK_KEY_c:
         if (event->state & GDK_MODIFIER_INTENT_PRIMARY_ACCELERATOR)
         {
-            gnc_item_edit_copy_clipboard(item_edit);
+            gnc_item_edit_copy_clipboard (item_edit);
             handled = TRUE;
         }
         break;
@@ -1582,7 +1582,7 @@ gnucash_sheet_clipboard_event (GnucashSheet *sheet, GdkEventKey *event)
     case GDK_KEY_x:
         if (event->state & GDK_MODIFIER_INTENT_PRIMARY_ACCELERATOR)
         {
-            gnc_item_edit_cut_clipboard(item_edit);
+            gnc_item_edit_cut_clipboard (item_edit);
             handled = TRUE;
         }
         break;
@@ -1602,83 +1602,157 @@ gnucash_sheet_clipboard_event (GnucashSheet *sheet, GdkEventKey *event)
         }
         else if (event->state & GDK_MODIFIER_INTENT_PRIMARY_ACCELERATOR)
         {
-            gnc_item_edit_copy_clipboard(item_edit);
+            gnc_item_edit_copy_clipboard (item_edit);
             handled = TRUE;
         }
         break;
     }
-
     return handled;
 }
 
-static gboolean
-gnucash_sheet_direct_event(GnucashSheet *sheet, GdkEvent *event)
+static void
+gnucash_sheet_need_horizontal_scroll (GnucashSheet *sheet,
+                                      VirtualLocation *new_virt_loc)
 {
-    GtkEditable *editable;
-    Table *table = sheet->table;
-    VirtualLocation virt_loc;
-//    gboolean changed;
-    gboolean result;
+    gint hscroll_val;
+    gint cell_width = 0;
+    gint offset;
 
-    char *new_text = NULL;
+    if (sheet->window_width == sheet->width)
+        return;
 
-    int cursor_position, start_sel, end_sel;
-    int new_position, new_start, new_end;
+    // get the horizontal scroll window value
+    hscroll_val = (gint) gtk_adjustment_get_value (sheet->hadj);
 
-    gnucash_cursor_get_virt(GNUCASH_CURSOR(sheet->cursor), &virt_loc);
+    // offset is the start of the cell for column
+    offset = gnc_header_get_cell_offset (GNC_HEADER(sheet->header_item), 
+                                         new_virt_loc->phys_col_offset, &cell_width);
 
-    if (!gnc_table_virtual_loc_valid (table, virt_loc, TRUE))
-        return FALSE;
+    if (((offset + cell_width) > sheet->window_width) || (offset < hscroll_val))
+        gtk_adjustment_set_value (sheet->hadj, offset);
+}
 
-    if (gnc_table_model_read_only (table->model))
-        return FALSE;
+static gboolean
+process_motion_keys (GnucashSheet *sheet, GdkEventKey *event, gboolean *pass_on,
+                     gncTableTraversalDir *direction,
+                     VirtualLocation* new_virt_loc)
+{
+    int distance;
+    VirtualLocation cur_virt_loc = *new_virt_loc;
 
-    editable = GTK_EDITABLE(sheet->entry);
-
-    cursor_position = gtk_editable_get_position (editable);
-    gtk_editable_get_selection_bounds (editable, &start_sel, &end_sel);
-
-    new_position = cursor_position;
-    new_start = start_sel;
-    new_end = end_sel;
-
-    result = gnc_table_direct_update (table, virt_loc,
-                                      &new_text,
-                                      &new_position,
-                                      &new_start, &new_end,
-                                      event);
-
-//    changed = FALSE;
-
-    if (new_text != NULL)
+    switch (event->keyval)
     {
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->insert_signal);
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->delete_signal);
+        case GDK_KEY_Return:
+        case GDK_KEY_KP_Enter:
+            g_signal_emit_by_name (sheet->reg, "activate_cursor");
+            /* Clear the saved selection. */
+            sheet->pos = sheet->bound;
+            return TRUE;
+            break;
+        case GDK_KEY_Tab:
+        case GDK_KEY_ISO_Left_Tab:
+            if (event->state & GDK_SHIFT_MASK)
+            {
+                *direction = GNC_TABLE_TRAVERSE_LEFT;
+                gnc_table_move_tab (sheet->table, new_virt_loc, FALSE);
+            }
+            else
+            {
+                *direction = GNC_TABLE_TRAVERSE_RIGHT;
+                gnc_table_move_tab (sheet->table, new_virt_loc, TRUE);
+            }
+            break;
+        case GDK_KEY_KP_Page_Up:
+        case GDK_KEY_Page_Up:
+            *direction = GNC_TABLE_TRAVERSE_UP;
+            new_virt_loc->phys_col_offset = 0;
+            if (event->state & GDK_SHIFT_MASK)
+                new_virt_loc->vcell_loc.virt_row = 1;
+            else
+            {
+                distance = sheet->num_visible_phys_rows - 1;
+                gnc_table_move_vertical_position
+                    (sheet->table, new_virt_loc, -distance);
+            }
+            break;
+        case GDK_KEY_KP_Page_Down:
+        case GDK_KEY_Page_Down:
+            *direction = GNC_TABLE_TRAVERSE_DOWN;
+            new_virt_loc->phys_col_offset = 0;
+            if (event->state & GDK_SHIFT_MASK)
+                new_virt_loc->vcell_loc.virt_row =
+                    sheet->num_virt_rows - 1;
+            else
+            {
+                distance = sheet->num_visible_phys_rows - 1;
+                gnc_table_move_vertical_position
+                    (sheet->table, new_virt_loc, distance);
+            }
+            break;
+        case GDK_KEY_KP_Up:
+        case GDK_KEY_Up:
+            *direction = GNC_TABLE_TRAVERSE_UP;
+            gnc_table_move_vertical_position (sheet->table,
+                                              new_virt_loc, -1);
+            break;
+        case GDK_KEY_KP_Down:
+        case GDK_KEY_Down:
+        case GDK_KEY_Menu:
+            if (event->keyval == GDK_KEY_Menu ||
+                (event->state & GDK_MODIFIER_INTENT_PRIMARY_ACCELERATOR))
+            {
+                GncItemEdit *item_edit = GNC_ITEM_EDIT(sheet->item_editor);
 
-        gtk_entry_set_text (GTK_ENTRY (sheet->entry), new_text);
+                if (gnc_table_confirm_change (sheet->table, cur_virt_loc))
+                    gnc_item_edit_show_popup (item_edit);
 
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->delete_signal);
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->insert_signal);
+                /* Clear the saved selection for the new cell. */
+                sheet->pos = sheet->bound;
+                return TRUE;
+            }
 
-//        changed = TRUE;
+            *direction = GNC_TABLE_TRAVERSE_DOWN;
+            gnc_table_move_vertical_position (sheet->table,
+                                              new_virt_loc, 1);
+            break;
+        case GDK_KEY_KP_Right:
+        case GDK_KEY_Right:
+        case GDK_KEY_KP_Left:
+        case GDK_KEY_Left:
+        case GDK_KEY_Home:
+        case GDK_KEY_End:
+            /* Clear the saved selection, we're not using it. */
+            sheet->pos = sheet->bound;
+            *pass_on = TRUE;
+            break;
+        default:
+            if (gnucash_sheet_clipboard_event (sheet, event))
+            {
+                /* Clear the saved selection. */
+                sheet->pos = sheet->bound;
+                return TRUE;
+            }
+            *pass_on = TRUE;
+            break;
     }
+    // does the sheet need horizontal scrolling due to tab
+    gnucash_sheet_need_horizontal_scroll (sheet, new_virt_loc);
 
-    if (new_position != cursor_position)
+    return FALSE;
+}
+
+static gboolean
+pass_to_entry_handler (GnucashSheet *sheet, GdkEventKey *event)
+{
+    gboolean result = FALSE;
+    GtkEditable *editable = GTK_EDITABLE(sheet->entry);
+
+    // If sheet is readonly, entry is not realized
+    if (gtk_widget_get_realized (GTK_WIDGET(editable)))
     {
-        gtk_editable_set_position (editable, new_position);
-//        changed = TRUE;
+        result = gtk_widget_event (GTK_WIDGET(editable), (GdkEvent*)event);
+        gnucash_sheet_set_selection_from_entry (sheet);
     }
-
-    if ((new_start != start_sel) || (new_end != end_sel))
-    {
-        gtk_editable_select_region(editable, new_start, new_end);
-//        changed = TRUE;
-    }
-
     return result;
 }
 
@@ -1695,159 +1769,48 @@ gnucash_sheet_key_press_event_internal (GtkWidget *widget, GdkEventKey *event)
     int distance;
     GdkModifierType modifiers = gtk_accelerator_get_default_mod_mask ();
 
-    g_return_val_if_fail(widget != NULL, TRUE);
-    g_return_val_if_fail(GNUCASH_IS_SHEET(widget), TRUE);
-    g_return_val_if_fail(event != NULL, TRUE);
+    g_return_val_if_fail (widget != NULL, TRUE);
+    g_return_val_if_fail (GNUCASH_IS_SHEET(widget), TRUE);
+    g_return_val_if_fail (event != NULL, TRUE);
 
-    sheet = GNUCASH_SHEET (widget);
+    sheet = GNUCASH_SHEET(widget);
     table = sheet->table;
-
-    if (gnucash_sheet_direct_event(sheet, (GdkEvent *) event))
+    /* Don't respond to stand-alone modifier keys. */
+    if (event->is_modifier)
         return TRUE;
+    /* Initially sync the selection, the user might have adjusted it with the
+     * mouse.
+     */
+    gnucash_sheet_set_selection_from_entry (sheet);
+    /* Direct_event gets first whack */
+    if (gnucash_sheet_direct_event (sheet, (GdkEvent *) event))
+        return TRUE;
+    /* Followed by the input method */
+    if (gtk_entry_im_context_filter_keypress (GTK_ENTRY(sheet->entry), event))
+    {
+        /* Restore the saved cursor position in case GtkEntry's IMContext
+         * handlers messed with it after we set it in our insert_cb.
+         */
+        gnucash_sheet_set_entry_selection (sheet);
+        return TRUE;
+    }
 
     gnucash_cursor_get_virt (GNUCASH_CURSOR(sheet->cursor), &cur_virt_loc);
     new_virt_loc = cur_virt_loc;
 
-    /* Don't process any keystrokes where a modifier key (Alt,
-     * Meta, etc.) is being held down.  This should't include
-         * MOD2, aka NUM LOCK. */
+    /* Don't process any keystrokes where a modifier key (Alt, Meta, etc.) is
+     * being held down.  This shouldn't include NUM LOCK.
+     */
     if (event->state & modifiers & (GDK_MODIFIER_INTENT_DEFAULT_MOD_MASK))
         pass_on = TRUE;
-
-    /* Calculate tentative physical values */
-    if (!pass_on)
-    {
-        switch (event->keyval)
-        {
-        case GDK_KEY_Return:
-        case GDK_KEY_KP_Enter:
-            g_signal_emit_by_name(sheet->reg, "activate_cursor");
-	    /* Clear the saved selection. */
-	    sheet->end_sel = sheet->start_sel;
+    else if (process_motion_keys (sheet, event, &pass_on,
+                                  &direction, &new_virt_loc)) //may set pass_on
             return TRUE;
-            break;
-        case GDK_KEY_Tab:
-        case GDK_KEY_ISO_Left_Tab:
-            if (event->state & GDK_SHIFT_MASK)
-            {
-                direction = GNC_TABLE_TRAVERSE_LEFT;
-                gnc_table_move_tab (table, &new_virt_loc,
-                                    FALSE);
-            }
-            else
-            {
-                direction = GNC_TABLE_TRAVERSE_RIGHT;
-                gnc_table_move_tab (table, &new_virt_loc,
-                                    TRUE);
-            }
-            break;
-        case GDK_KEY_KP_Page_Up:
-        case GDK_KEY_Page_Up:
-            direction = GNC_TABLE_TRAVERSE_UP;
-            new_virt_loc.phys_col_offset = 0;
-            if (event->state & GDK_SHIFT_MASK)
-                new_virt_loc.vcell_loc.virt_row = 1;
-            else
-            {
-                distance = sheet->num_visible_phys_rows - 1;
-                gnc_table_move_vertical_position
-                (table, &new_virt_loc, -distance);
-            }
-            break;
-        case GDK_KEY_KP_Page_Down:
-        case GDK_KEY_Page_Down:
-            direction = GNC_TABLE_TRAVERSE_DOWN;
-            new_virt_loc.phys_col_offset = 0;
-            if (event->state & GDK_SHIFT_MASK)
-                new_virt_loc.vcell_loc.virt_row =
-                    sheet->num_virt_rows - 1;
-            else
-            {
-                distance = sheet->num_visible_phys_rows - 1;
-                gnc_table_move_vertical_position
-                (table, &new_virt_loc, distance);
-            }
-            break;
-        case GDK_KEY_KP_Up:
-        case GDK_KEY_Up:
-            direction = GNC_TABLE_TRAVERSE_UP;
-            gnc_table_move_vertical_position (table,
-                                              &new_virt_loc, -1);
-            break;
-        case GDK_KEY_KP_Down:
-        case GDK_KEY_Down:
-        case GDK_KEY_Menu:
-            if (event->keyval == GDK_KEY_Menu ||
-                    (event->state & GDK_MODIFIER_INTENT_PRIMARY_ACCELERATOR))
-            {
-                GncItemEdit *item_edit;
-
-                item_edit = GNC_ITEM_EDIT (sheet->item_editor);
-
-                if (gnc_table_confirm_change (table,
-                                              cur_virt_loc))
-                    gnc_item_edit_show_popup (item_edit);
-		/* Clear the saved selection for the new cell. */
-		sheet->end_sel = sheet->start_sel;
-
-                return TRUE;
-            }
-
-            direction = GNC_TABLE_TRAVERSE_DOWN;
-            gnc_table_move_vertical_position (table,
-                                              &new_virt_loc, 1);
-            break;
-        case GDK_KEY_Control_L:
-        case GDK_KEY_Control_R:
-        case GDK_KEY_Shift_L:
-        case GDK_KEY_Shift_R:
-        case GDK_KEY_Alt_L:
-        case GDK_KEY_Alt_R:
-            pass_on = TRUE;
-            break;
-        case GDK_KEY_KP_Right:
-        case GDK_KEY_Right:
-        case GDK_KEY_KP_Left:
-        case GDK_KEY_Left:
-        case GDK_KEY_Home:
-        case GDK_KEY_End:
-	    /* Clear the saved selection, we're not using it. */
-	    sheet->end_sel = sheet->start_sel;
-	    pass_on = TRUE;
-	    break;
-        default:
-            if (gnucash_sheet_clipboard_event(sheet, event))
-	    {
-		/* Clear the saved selection. */
-		sheet->end_sel = sheet->start_sel;
-                return TRUE;
-	    }
-            pass_on = TRUE;
-            break;
-        }
-    }
 
     /* Forward the keystroke to the input line */
     if (pass_on)
     {
-        gboolean result = FALSE;
-        GtkEditable *editable = GTK_EDITABLE(sheet->entry);
-
-        // If sheet is readonly, entry is not realized
-        if (gtk_widget_get_realized (GTK_WIDGET(editable)))
-	{
-            result = gtk_widget_event (GTK_WIDGET(editable), (GdkEvent*)event);
-        /* Restore the stored selection in case it was eaten by the input
-         * module.
-         */
-	    if (sheet->start_sel != sheet->end_sel)
-	    {
-		gtk_editable_select_region(editable, sheet->start_sel,
-					   sheet->end_sel);
-		sheet->end_sel = sheet->start_sel;
-	    }
-	}
-        return result;
+        return pass_to_entry_handler (sheet, event);
     }
 
     abort_move = gnc_table_traverse_update (table, cur_virt_loc,
@@ -1855,10 +1818,15 @@ gnucash_sheet_key_press_event_internal (GtkWidget *widget, GdkEventKey *event)
 
     /* If that would leave the register, abort */
     if (abort_move)
+    {
+        // Make sure the sheet is the focus
+        if (!gtk_widget_has_focus (GTK_WIDGET(sheet)))
+            gtk_widget_grab_focus (GTK_WIDGET(sheet));
         return TRUE;
+    }
 
     /* Clear the saved selection for the new cell. */
-    sheet->end_sel = sheet->start_sel;
+    sheet->pos = sheet->bound;
     gnucash_sheet_cursor_move (sheet, new_virt_loc);
 
     /* return true because we handled the key press */
@@ -1870,13 +1838,12 @@ gnucash_sheet_key_press_event (GtkWidget *widget, GdkEventKey *event)
 {
     GnucashSheet *sheet;
     GtkEditable *editable = NULL;
-    int start_sel = 0, end_sel = 0;
 
-    g_return_val_if_fail(widget != NULL, TRUE);
-    g_return_val_if_fail(GNUCASH_IS_SHEET(widget), TRUE);
-    g_return_val_if_fail(event != NULL, TRUE);
+    g_return_val_if_fail (widget != NULL, TRUE);
+    g_return_val_if_fail (GNUCASH_IS_SHEET(widget), TRUE);
+    g_return_val_if_fail (event != NULL, TRUE);
 
-    sheet = GNUCASH_SHEET (widget);
+    sheet = GNUCASH_SHEET(widget);
     editable = GTK_EDITABLE(sheet->entry);
     /* bug#60582 comment#27 2
            save shift state to enable <shift minus> and <shift equal>
@@ -1888,264 +1855,23 @@ gnucash_sheet_key_press_event (GtkWidget *widget, GdkEventKey *event)
     if (event->hardware_keycode == VK_DECIMAL)
         event->keyval = GDK_KEY_KP_Decimal;
 #endif
-    if (sheet->preedit_length)
-    {
-        sheet->shift_state = 0;
-        sheet->keyval_state = 0;
-    }
-    else
-    {
-        sheet->shift_state = event->state & GDK_SHIFT_MASK;
-        sheet->keyval_state = (event->keyval == GDK_KEY_KP_Decimal) ? GDK_KEY_KP_Decimal : 0;
-    }
-
-    gtk_editable_get_selection_bounds (editable, &start_sel, &end_sel);
-
-    if (gtk_im_context_filter_keypress (sheet->im_context, event))
-    {
-        sheet->need_im_reset = TRUE;
-        return TRUE;
-    }
+    sheet->shift_state = event->state & GDK_SHIFT_MASK;
+    sheet->keyval_state =
+        (event->keyval == GDK_KEY_KP_Decimal) ? GDK_KEY_KP_Decimal : 0;
 
     return gnucash_sheet_key_press_event_internal (widget, event);
 }
 
 static gint
-gnucash_sheet_key_release_event(GtkWidget *widget, GdkEventKey *event)
+gnucash_sheet_key_release_event (GtkWidget *widget, GdkEventKey *event)
 {
     GnucashSheet *sheet;
 
-    g_return_val_if_fail(widget != NULL, TRUE);
-    g_return_val_if_fail(GNUCASH_IS_SHEET(widget), TRUE);
-    g_return_val_if_fail(event != NULL, TRUE);
-
-    sheet = GNUCASH_SHEET (widget);
-
-    if (gtk_im_context_filter_keypress (sheet->im_context, event))
-    {
-        sheet->need_im_reset = TRUE;
-        return TRUE;
-    }
+    g_return_val_if_fail (widget != NULL, TRUE);
+    g_return_val_if_fail (GNUCASH_IS_SHEET(widget), TRUE);
+    g_return_val_if_fail (event != NULL, TRUE);
 
     return FALSE;
-}
-
-static void
-gnucash_sheet_im_context_reset_flags(GnucashSheet *sheet)
-{
-    sheet->preedit_length = 0;
-    sheet->preedit_char_length = 0;
-    sheet->preedit_start_position = -1;
-    sheet->preedit_cursor_position = 0;
-    sheet->preedit_selection_length = 0;
-}
-
-static void
-gnucash_sheet_im_context_reset(GnucashSheet *sheet)
-{
-    if (sheet->need_im_reset)
-    {
-        if (sheet->preedit_attrs)
-        {
-            pango_attr_list_unref (sheet->preedit_attrs);
-            sheet->preedit_attrs = NULL;
-        }
-        gtk_im_context_reset (sheet->im_context);
-        sheet->need_im_reset = FALSE;
-    }
-    gnucash_sheet_im_context_reset_flags(sheet);
-}
-
-static void
-gnucash_sheet_commit_cb (GtkIMContext *context, const gchar *str,
-                         GnucashSheet *sheet)
-{
-    GtkEditable *editable;
-    gint tmp_pos, sel_start, sel_end;
-
-    g_return_if_fail(strlen(str) > 0);
-    g_return_if_fail(sheet->editing == TRUE);
-
-    editable = GTK_EDITABLE (sheet->entry);
-
-    if (strlen(str) == 1 && sheet->direct_update_cell)
-    {
-        /* Reconstruct keyevent and direct update */
-        GdkEvent *event;
-        GdkEventKey *keyevent;
-        gboolean result;
-
-        event = gdk_event_new (GDK_KEY_PRESS);
-        keyevent = (GdkEventKey *) event;
-        keyevent->keyval =
-            sheet->keyval_state ? sheet->keyval_state
-            : gdk_unicode_to_keyval(str[0]);
-        keyevent->state |= sheet->shift_state;
-        result = gnucash_sheet_direct_event(sheet, event);
-        gdk_event_free(event);
-
-        if (result)
-        {
-            gnucash_sheet_im_context_reset_flags(sheet);
-            return;
-        }
-    }
-
-    /* delete preedit string from editable*/
-    if (sheet->preedit_length)
-    {
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->delete_signal);
-        gtk_editable_delete_text (editable, sheet->preedit_start_position,
-                                  sheet->preedit_start_position
-                                  + sheet->preedit_char_length);
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->delete_signal);
-    }
-
-    if (gtk_editable_get_selection_bounds (editable, &sel_start, &sel_end))
-    {
-        if (sel_start != sel_end)
-        {
-            sheet->preedit_selection_length = 0;
-            gtk_editable_delete_selection (editable);
-        }
-    }
-
-    tmp_pos = (sheet->preedit_start_position == -1) ?
-              gtk_editable_get_position (editable)
-              : sheet->preedit_start_position;
-    gtk_editable_insert_text (editable, str, strlen (str), &tmp_pos);
-
-    /* insert_cb may have changed the selection, but gtk_editable_set_position
-       (erroneously?) clears it.  If a selection is set, preserve it. */
-    gtk_editable_get_selection_bounds (editable, &sel_start, &sel_end);
-    gtk_editable_set_position (editable, tmp_pos);
-    if (sel_start != sel_end)
-        gtk_editable_select_region (editable, sel_start, sel_end);
-
-    gnucash_sheet_im_context_reset_flags(sheet);
-}
-
-static void
-gnucash_sheet_preedit_changed_cb (GtkIMContext *context, GnucashSheet *sheet)
-{
-    gchar *preedit_string;
-    GtkEditable *editable;
-
-    g_return_if_fail(context != NULL);
-    g_return_if_fail(sheet->editing == TRUE);
-
-    editable = GTK_EDITABLE (sheet->entry);
-
-    /* save preedit start position and selection */
-    if (sheet->preedit_length == 0)
-    {
-        int start_pos, end_pos;
-        if ( gtk_editable_get_selection_bounds (editable, &start_pos, &end_pos))
-        {
-            sheet->preedit_start_position = start_pos;
-            sheet->preedit_selection_length = end_pos - start_pos;
-        }
-        else
-        {
-            sheet->preedit_start_position =
-                gtk_editable_get_position (editable);
-        }
-    }
-#ifdef G_OS_WIN32
-    else  /* sheet->preedit_length != 0 */
-    {
-        /* On Windows, gtk_im_context_reset() in gnucash_sheet_key_press_event()
-         * always returns FALSE because Windows IME handles key press at the
-         * top level window. So sheet->need_im_reset = TRUE here. */
-        sheet->need_im_reset = TRUE;
-    }
-#endif /* G_OS_WIN32 */
-
-    if (sheet->preedit_attrs)
-        pango_attr_list_unref (sheet->preedit_attrs);
-
-    gtk_im_context_get_preedit_string (sheet->im_context, &preedit_string,
-                                       &sheet->preedit_attrs, &(sheet->preedit_cursor_position));
-
-    if (sheet->preedit_length)
-    {
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->delete_signal);
-        gtk_editable_delete_text (editable, sheet->preedit_start_position,
-                                  sheet->preedit_start_position
-                                  + sheet->preedit_char_length);
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->delete_signal);
-    }
-
-    sheet->preedit_length = strlen (preedit_string);
-    sheet->preedit_char_length = g_utf8_strlen(preedit_string, -1);
-
-    if (sheet->preedit_length)
-    {
-        int tmp_pos = sheet->preedit_start_position;
-        g_signal_handler_block (G_OBJECT (sheet->entry),
-                                sheet->insert_signal);
-        gtk_editable_insert_text (editable, preedit_string, sheet->preedit_length,
-                                  &tmp_pos);
-        g_signal_handler_unblock (G_OBJECT (sheet->entry),
-                                  sheet->insert_signal);
-
-        gtk_editable_set_position (editable, sheet->preedit_start_position
-                                   + sheet->preedit_cursor_position);
-
-        if ( sheet->preedit_selection_length != 0)
-        {
-            gtk_editable_select_region (editable,
-                                        sheet->preedit_start_position
-                                        + sheet->preedit_char_length,
-                                        sheet->preedit_start_position
-                                        + sheet->preedit_char_length
-                                        + sheet->preedit_selection_length);
-        }
-    }
-    else
-    {
-        gnucash_sheet_im_context_reset_flags(sheet);
-    }
-
-    g_free (preedit_string);
-}
-
-static gboolean
-gnucash_sheet_retrieve_surrounding_cb (GtkIMContext *context, GnucashSheet *sheet)
-{
-    GtkEditable *editable;
-    gchar *surrounding;
-    gint   cur_pos;
-
-    editable = GTK_EDITABLE (sheet->entry);
-    surrounding = gtk_editable_get_chars (editable, 0, -1);
-    cur_pos = gtk_editable_get_position (editable);
-
-    gtk_im_context_set_surrounding (context,
-                                    surrounding, strlen (surrounding),
-                                    g_utf8_offset_to_pointer (surrounding, cur_pos) - surrounding);
-    g_free (surrounding);
-    return TRUE;
-}
-
-static gboolean
-gnucash_sheet_delete_surrounding_cb (GtkIMContext *context, gint offset,
-                                     gint n_chars, GnucashSheet *sheet)
-{
-    GtkEditable *editable;
-    gint cur_pos;
-
-    editable = GTK_EDITABLE (sheet->entry);
-    cur_pos = gtk_editable_get_position (editable);
-
-    gtk_editable_delete_text (editable,
-                              cur_pos + offset,
-                              cur_pos + offset + n_chars);
-    return TRUE;
 }
 
 
@@ -2156,7 +1882,7 @@ gnucash_sheet_goto_virt_loc (GnucashSheet *sheet, VirtualLocation virt_loc)
     gboolean abort_move;
     VirtualLocation cur_virt_loc;
 
-    g_return_if_fail(GNUCASH_IS_SHEET(sheet));
+    g_return_if_fail (GNUCASH_IS_SHEET(sheet));
 
     table = sheet->table;
 
@@ -2170,6 +1896,9 @@ gnucash_sheet_goto_virt_loc (GnucashSheet *sheet, VirtualLocation virt_loc)
 
     if (abort_move)
         return;
+
+    // does the sheet need horizontal scrolling
+    gnucash_sheet_need_horizontal_scroll (sheet, &virt_loc);
 
     gnucash_sheet_cursor_move (sheet, virt_loc);
 }
@@ -2193,7 +1922,7 @@ GncItemEdit *gnucash_sheet_get_item_edit (GnucashSheet *sheet)
     if (sheet->item_editor == NULL)
         return NULL;
     else
-        return GNC_ITEM_EDIT (sheet->item_editor);
+        return GNC_ITEM_EDIT(sheet->item_editor);
 }
 
 
@@ -2223,7 +1952,7 @@ gnucash_sheet_block_set_from_table (GnucashSheet *sheet,
     block = gnucash_sheet_get_block (sheet, vcell_loc);
     style = gnucash_sheet_get_style_from_table (sheet, vcell_loc);
 
-    if (block == NULL)
+    if (!block)
         return FALSE;
 
     table = sheet->table;
@@ -2241,10 +1970,9 @@ gnucash_sheet_block_set_from_table (GnucashSheet *sheet,
     if (block->style == NULL)
     {
         block->style = style;
-        gnucash_sheet_style_ref(sheet, block->style);
+        gnucash_sheet_style_ref (sheet, block->style);
         return TRUE;
     }
-
     return FALSE;
 }
 
@@ -2260,6 +1988,7 @@ gnucash_sheet_col_max_width (GnucashSheet *sheet, gint virt_col, gint cell_col)
     SheetBlockStyle *style;
     PangoLayout *layout = gtk_widget_create_pango_layout (GTK_WIDGET (sheet), "");
     GncItemEdit *item_edit = GNC_ITEM_EDIT(sheet->item_editor);
+    const gchar *type_name;
 
     g_return_val_if_fail (virt_col >= 0, 0);
     g_return_val_if_fail (virt_col < sheet->num_virt_cols, 0);
@@ -2270,18 +1999,26 @@ gnucash_sheet_col_max_width (GnucashSheet *sheet, gint virt_col, gint cell_col)
         VirtualCellLocation vcell_loc = { virt_row, virt_col };
 
         block = gnucash_sheet_get_block (sheet, vcell_loc);
+        if (!block)
+            continue;
+
         style = block->style;
 
         if (!style)
             continue;
 
         if (cell_col < style->ncols)
+        {
             for (cell_row = 0; cell_row < style->nrows; cell_row++)
             {
                 VirtualLocation virt_loc;
                 const char *text;
 
-                virt_loc.vcell_loc = vcell_loc;
+                if (virt_row == 0)
+                    virt_loc.vcell_loc = sheet->table->current_cursor_loc.vcell_loc;
+                else
+                    virt_loc.vcell_loc = vcell_loc;
+
                 virt_loc.phys_row_offset = cell_row;
                 virt_loc.phys_col_offset = cell_col;
 
@@ -2302,27 +2039,33 @@ gnucash_sheet_col_max_width (GnucashSheet *sheet, gint virt_col, gint cell_col)
                 width += (gnc_item_edit_get_margin (item_edit, left_right) +
                           gnc_item_edit_get_padding_border (item_edit, left_right));
 
-                max = MAX (max, width);
+                // get the cell type so we can add the button width to the
+                // text width if required.
+                type_name = gnc_table_get_cell_type_name (sheet->table, virt_loc);
+                if ((g_strcmp0 (type_name, DATE_CELL_TYPE_NAME) == 0)
+                    || (g_strcmp0 (type_name, COMBO_CELL_TYPE_NAME) == 0))
+                {
+                    width += gnc_item_edit_get_button_width (item_edit) + 2; // add 2 for the button margin
+                }
+                max = MAX(max, width);
             }
+        }
     }
 
     g_object_unref (layout);
 
-    return max + 1; // add 1 for the border
+    return max;
 }
 
 void
 gnucash_sheet_set_scroll_region (GnucashSheet *sheet)
 {
     guint new_h, new_w;
-//    GtkWidget *widget;
     GtkAllocation alloc;
     guint old_h, old_w;
 
     if (!sheet)
         return;
-
-//    widget = GTK_WIDGET(sheet);
 
     if (!sheet->header_item || !GNC_HEADER(sheet->header_item)->style)
         return;
@@ -2330,8 +2073,8 @@ gnucash_sheet_set_scroll_region (GnucashSheet *sheet)
     gtk_layout_get_size (GTK_LAYOUT(sheet), &old_w, &old_h);
 
     gtk_widget_get_allocation (GTK_WIDGET(sheet), &alloc);
-    new_h = MAX (sheet->height, alloc.height);
-    new_w  = MAX (sheet->width, alloc.width);
+    new_h = MAX(sheet->height, alloc.height);
+    new_w  = MAX(sheet->width, alloc.width);
 
     if (new_w != old_w || new_h != old_h)
         gtk_layout_set_size (GTK_LAYOUT(sheet), new_w, new_h);
@@ -2405,6 +2148,9 @@ gnucash_sheet_recompute_block_offsets (GnucashSheet *sheet)
 
             block = gnucash_sheet_get_block (sheet, vcell_loc);
 
+            if (!block)
+                continue;
+
             block->origin_x = width;
             block->origin_y = height;
 
@@ -2415,7 +2161,6 @@ gnucash_sheet_recompute_block_offsets (GnucashSheet *sheet)
         if (i > 0 && block && block->visible)
             height += block->style->dimensions->height;
     }
-
     sheet->height = height;
 }
 
@@ -2454,7 +2199,7 @@ gnucash_sheet_table_load (GnucashSheet *sheet, gboolean do_scroll)
                      vcell->cellblock->num_rows);
         }
 
-    gnc_header_set_header_rows (GNC_HEADER (sheet->header_item),
+    gnc_header_set_header_rows (GNC_HEADER(sheet->header_item),
                                 num_header_phys_rows);
     gnc_header_reconfigure (GNC_HEADER(sheet->header_item));
 
@@ -2482,19 +2227,20 @@ gnucash_sheet_table_load (GnucashSheet *sheet, gboolean do_scroll)
 /** Map a cell color type to a css style class. */
 void
 gnucash_get_style_classes (GnucashSheet *sheet, GtkStyleContext *stylectxt,
-                           RegisterColor field_type)
+                           RegisterColor field_type, gboolean use_neg_class)
 {
     gchar *full_class, *style_class = NULL;
 
     if (field_type >= COLOR_NEGATIVE) // Require a Negative fg color
     {
-        gtk_style_context_add_class (stylectxt, "negative-numbers");
+        if (use_neg_class)
+            gtk_style_context_add_class (stylectxt, "gnc-class-negative-numbers");
         field_type -= COLOR_NEGATIVE;
     }
     else
     {
         if (sheet->use_gnc_color_theme) // only add this class if builtin colors used
-            gtk_style_context_add_class (stylectxt, "register-foreground");
+            gtk_style_context_add_class (stylectxt, "gnc-class-register-foreground");
     }
 
     switch (field_type)
@@ -2529,11 +2275,11 @@ gnucash_get_style_classes (GnucashSheet *sheet, GtkStyleContext *stylectxt,
     }
 
     if (sheet->use_gnc_color_theme)
-        full_class = g_strconcat ("register-", style_class, NULL);
+        full_class = g_strconcat ("gnc-class-register-", style_class, NULL);
     else
     {
         gtk_style_context_add_class (stylectxt, GTK_STYLE_CLASS_VIEW);
-        full_class = g_strconcat (style_class, "-color", NULL);
+        full_class = g_strconcat ("gnc-class-user-register-", style_class, NULL);
     }
 
     gtk_style_context_add_class (stylectxt, full_class);
@@ -2549,12 +2295,10 @@ gnucash_sheet_class_init (GnucashSheetClass *klass)
     GObjectClass *gobject_class;
     GtkWidgetClass *widget_class;
 
-    gobject_class = G_OBJECT_CLASS (klass);
-    widget_class = GTK_WIDGET_CLASS (klass);
+    gobject_class = G_OBJECT_CLASS(klass);
+    widget_class = GTK_WIDGET_CLASS(klass);
 
-#if GTK_CHECK_VERSION(3,20,0)
-    gtk_widget_class_set_css_name (GTK_WIDGET_CLASS(klass), "sheet");
-#endif
+    gtk_widget_class_set_css_name (GTK_WIDGET_CLASS(klass), "gnc-id-sheet");
 
     sheet_parent_class = g_type_class_peek_parent (klass);
 
@@ -2582,9 +2326,6 @@ gnucash_sheet_init (GnucashSheet *sheet)
     gtk_widget_set_can_focus (GTK_WIDGET(sheet), TRUE);
     gtk_widget_set_can_default (GTK_WIDGET(sheet), TRUE);
 
-    // This sets a style class for when Gtk+ version is less than 3.20
-    gnc_widget_set_css_name (GTK_WIDGET(sheet), "sheet");
-
     sheet->num_visible_blocks = 1;
     sheet->num_visible_phys_rows = 1;
 
@@ -2609,29 +2350,18 @@ gnucash_sheet_init (GnucashSheet *sheet)
                                  gnucash_sheet_block_construct,
                                  gnucash_sheet_block_destroy, sheet);
 
-    gtk_widget_add_events(GTK_WIDGET(sheet), (GDK_EXPOSURE_MASK
-    | GDK_BUTTON_PRESS_MASK
-    | GDK_BUTTON_RELEASE_MASK
-    | GDK_POINTER_MOTION_MASK
-    | GDK_POINTER_MOTION_HINT_MASK));
+    gtk_widget_add_events (GTK_WIDGET(sheet),
+                          (GDK_EXPOSURE_MASK
+                          | GDK_BUTTON_PRESS_MASK
+                          | GDK_BUTTON_RELEASE_MASK
+                          | GDK_POINTER_MOTION_MASK
+                          | GDK_POINTER_MOTION_HINT_MASK));
 
     /* setup IMContext */
-    sheet->im_context = gtk_im_multicontext_new ();
-    sheet->preedit_length = 0;
-    sheet->preedit_char_length = 0;
-    sheet->preedit_start_position = -1;
-    sheet->preedit_cursor_position = 0;
-    sheet->preedit_selection_length = 0;
-    sheet->preedit_attrs = NULL;
     sheet->direct_update_cell = FALSE;
-    sheet->need_im_reset = FALSE;
-    sheet->commit_signal = 0;
-    sheet->preedit_changed_signal = 0;
-    sheet->retrieve_surrounding_signal = 0;
-    sheet->delete_surrounding_signal = 0;
     sheet->shift_state = 0;
     sheet->keyval_state = 0;
-    sheet->start_sel = sheet->end_sel = 0;
+    sheet->bound = sheet->pos = 0;
 }
 
 
@@ -2667,11 +2397,11 @@ gnucash_sheet_get_type (void)
 
 static gboolean
 gnucash_sheet_tooltip (GtkWidget  *widget, gint x, gint y,
-               gboolean    keyboard_mode, GtkTooltip *tooltip,
-               gpointer    user_data)
+                       gboolean    keyboard_mode,
+                       GtkTooltip *tooltip,
+                       gpointer    user_data)
 {
-    GnucashSheet *sheet = GNUCASH_SHEET (widget);
-    GnucashCursor *cursor = sheet->cursor;
+    GnucashSheet *sheet = GNUCASH_SHEET(widget);
     Table *table = sheet->table;
     VirtualLocation virt_loc;
     gchar *tooltip_text;
@@ -2711,7 +2441,7 @@ gnucash_sheet_tooltip (GtkWidget  *widget, gint x, gint y,
     by = block->origin_y;
 
     // get the cell location and dimensions
-    gnucash_sheet_style_get_cell_pixel_rel_coords (cursor->style,
+    gnucash_sheet_style_get_cell_pixel_rel_coords (block->style,
             virt_loc.phys_row_offset, virt_loc.phys_col_offset,
             &cx, &cy, &cw, &ch);
 
@@ -2736,11 +2466,14 @@ gnucash_sheet_new (Table *table)
 
     sheet = gnucash_sheet_create (table);
 
+    /* on create, the sheet can grab the focus */
+    sheet->sheet_has_focus = TRUE;
+
     /* The cursor */
     sheet->cursor = gnucash_cursor_new (sheet);
 
     /* set up the editor */
-    sheet->item_editor = gnc_item_edit_new(sheet);
+    sheet->item_editor = gnc_item_edit_new (sheet);
 
     /* some register data */
     sheet->dimensions_hash_table = g_hash_table_new_full (g_int_hash,
@@ -2749,10 +2482,10 @@ gnucash_sheet_new (Table *table)
 
     /* add tooltips to sheet */
     gtk_widget_set_has_tooltip (GTK_WIDGET(sheet), TRUE);
-    g_signal_connect(G_OBJECT(sheet), "query-tooltip",
-                     G_CALLBACK(gnucash_sheet_tooltip), NULL);
+    g_signal_connect (G_OBJECT(sheet), "query-tooltip",
+                      G_CALLBACK(gnucash_sheet_tooltip), NULL);
 
-    gnucash_sheet_refresh_from_prefs(sheet);
+    gnucash_sheet_refresh_from_prefs (sheet);
 
     return GTK_WIDGET(sheet);
 }

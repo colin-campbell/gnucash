@@ -175,7 +175,7 @@ const char *void_reason_str = "void-reason";
 const char *void_time_str = "void-time";
 const char *void_former_notes_str = "void-former-notes";
 const char *trans_is_closing_str = "book_closing";
-const char *assoc_uri_str = "assoc_uri";
+const char *doclink_uri_str = "assoc_uri"; // this is the old name for the document link, kept for compatibility
 
 /* KVP entry for date-due value */
 #define TRANS_DATE_DUE_KVP       "trans-date-due"
@@ -228,13 +228,13 @@ xaccTransStillHasSplit(const Transaction *trans, const Split *s)
         }                                                               \
     }
 
-G_INLINE_FUNC void mark_trans (Transaction *trans);
+static inline void mark_trans (Transaction *trans);
 void mark_trans (Transaction *trans)
 {
     FOR_EACH_SPLIT(trans, mark_split(s));
 }
 
-G_INLINE_FUNC void gen_event_trans (Transaction *trans);
+static inline void gen_event_trans (Transaction *trans);
 void gen_event_trans (Transaction *trans)
 {
     GList *node;
@@ -524,13 +524,14 @@ void
 xaccTransDump (const Transaction *trans, const char *tag)
 {
     GList *node;
+    char datebuff[MAX_DATE_LENGTH + 1];
 
     printf("%s Trans %p", tag, trans);
     memset(datebuff, 0, sizeof(datebuff));
-    qof_print_date_buff(datebuff, sizeof(datebuff), trans->date_entered);
+    qof_print_date_buff(datebuff, MAX_DATE_LENGTH, trans->date_entered);
     printf("    Entered:     %s\n", datebuff);
     memset(datebuff, 0, sizeof(datebuff));
-    qof_print_date_buff(datebuff, sizeof(datebuff), trans->date_posted);
+    qof_print_date_buff(datebuff, MAX_DATE_LENGTH, trans->date_posted);
     printf("    Posted:      %s\n", datebuff);
     printf("    Num:         %s\n", trans->num ? trans->num : "(null)");
     printf("    Description: %s\n",
@@ -568,7 +569,7 @@ xaccTransSortSplits (Transaction *trans)
         split = node->data;
         if (gnc_numeric_negative_p (xaccSplitGetValue(split)))
             continue;
-        new_list = g_list_append(new_list, split);
+        new_list = g_list_prepend (new_list, split);
     }
 
     /* then credits */
@@ -577,12 +578,12 @@ xaccTransSortSplits (Transaction *trans)
         split = node->data;
         if (!gnc_numeric_negative_p (xaccSplitGetValue(split)))
             continue;
-        new_list = g_list_append(new_list, split);
+        new_list = g_list_prepend (new_list, split);
     }
 
     /* install newly sorted list */
     g_list_free(trans->splits);
-    trans->splits = new_list;
+    trans->splits = g_list_reverse (new_list);
 }
 
 
@@ -675,15 +676,25 @@ Transaction *
 xaccTransClone (const Transaction *from)
 {
     Transaction *to = xaccTransCloneNoKvp (from);
-    int i = 0;
-    int length = g_list_length (from->splits);
+    GList *lfrom, *lto;
 
     xaccTransBeginEdit (to);
     qof_instance_copy_kvp (QOF_INSTANCE (to), QOF_INSTANCE (from));
-    g_assert (g_list_length (to->splits) == length);
-    for (i = 0; i < length; ++i)
-	xaccSplitCopyKvp (g_list_nth_data (from->splits, i),
-			    g_list_nth_data (to->splits, i));
+    g_return_val_if_fail (g_list_length (to->splits) == g_list_length (from->splits),
+                          NULL);
+
+    lfrom = from->splits;
+    lto = to->splits;
+
+    /* lfrom and lto are known to be of equal length via above
+       g_return_val_if_fail */
+    while (lfrom != NULL)
+    {
+        xaccSplitCopyKvp (lfrom->data, lto->data);
+        lfrom = lfrom->next;
+        lto = lto->next;
+    }
+
     xaccTransCommitEdit (to);
     return to;
 }
@@ -758,7 +769,7 @@ xaccTransCopyFromClipBoard(const Transaction *from_trans, Transaction *to_trans,
         xaccTransSetNum(to_trans, xaccTransGetNum(from_trans));
 
     xaccTransSetNotes(to_trans, xaccTransGetNotes(from_trans));
-    xaccTransSetAssociation(to_trans, xaccTransGetAssociation (from_trans));
+    xaccTransSetDocLink(to_trans, xaccTransGetDocLink (from_trans));
     if(!no_date)
     {
         xaccTransSetDatePostedSecs(to_trans, xaccTransRetDatePosted (from_trans));
@@ -2145,18 +2156,18 @@ xaccTransSetDescription (Transaction *trans, const char *desc)
 }
 
 void
-xaccTransSetAssociation (Transaction *trans, const char *assoc)
+xaccTransSetDocLink (Transaction *trans, const char *doclink)
 {
-    if (!trans || !assoc) return;
+    if (!trans || !doclink) return;
     xaccTransBeginEdit(trans);
-    if (g_strcmp0 (assoc, "") == 0)
-        qof_instance_set_kvp (QOF_INSTANCE (trans), NULL, 1, assoc_uri_str);
+    if (g_strcmp0 (doclink, "") == 0)
+        qof_instance_set_kvp (QOF_INSTANCE (trans), NULL, 1, doclink_uri_str);
     else
     {
         GValue v = G_VALUE_INIT;
         g_value_init (&v, G_TYPE_STRING);
-        g_value_set_string (&v, assoc);
-        qof_instance_set_kvp (QOF_INSTANCE (trans), &v, 1, assoc_uri_str);
+        g_value_set_string (&v, doclink);
+        qof_instance_set_kvp (QOF_INSTANCE (trans), &v, 1, doclink_uri_str);
     }
     qof_instance_set_dirty(QOF_INSTANCE(trans));
     xaccTransCommitEdit(trans);
@@ -2255,6 +2266,8 @@ SplitList *
 xaccTransGetAPARAcctSplitList (const Transaction *trans, gboolean strict)
 {
     GList *apar_splits = NULL;
+    if (!trans) return NULL;
+
     FOR_EACH_SPLIT (trans,
                     const Account *account = xaccSplitGetAccount(s);
                     if (account && xaccAccountIsAPARType(xaccAccountGetType(account)))
@@ -2334,11 +2347,11 @@ xaccTransGetDescription (const Transaction *trans)
 }
 
 const char *
-xaccTransGetAssociation (const Transaction *trans)
+xaccTransGetDocLink (const Transaction *trans)
 {
     GValue v = G_VALUE_INIT;
     if (!trans) return NULL;
-    qof_instance_get_kvp (QOF_INSTANCE (trans), &v, 1, assoc_uri_str);
+    qof_instance_get_kvp (QOF_INSTANCE (trans), &v, 1, doclink_uri_str);
     if (G_VALUE_HOLDS_STRING (&v))
          return g_value_get_string (&v);
     return NULL;
@@ -2925,6 +2938,100 @@ xaccTransFindSplitByAccount(const Transaction *trans, const Account *acc)
     return NULL;
 }
 
+static void
+record_price (Split *split,
+              PriceSource source)
+{
+    Transaction *trans;
+    Account *account;
+    QofBook* book;
+    GNCPriceDB* pricedb;
+    gnc_commodity* comm;
+    gnc_commodity* curr;
+    GNCPrice* price;
+    gnc_numeric price_value, value, amount;
+    int scu;
+    time64 time;
+    gboolean swap;
+
+    account = xaccSplitGetAccount (split);
+    if (!xaccAccountIsPriced (account))
+    {
+       return;
+    }
+    amount = xaccSplitGetAmount (split);
+    if (gnc_numeric_zero_p (amount))
+    {
+       return;
+    }
+    trans = xaccSplitGetParent (split);
+    value = gnc_numeric_div (xaccSplitGetValue (split), amount,
+                             GNC_DENOM_AUTO,
+                             GNC_HOW_DENOM_EXACT);
+    book = qof_instance_get_book (QOF_INSTANCE (account));
+    pricedb = gnc_pricedb_get_db (book);
+    comm = xaccAccountGetCommodity (account);
+    curr = xaccTransGetCurrency (trans);
+    scu = gnc_commodity_get_fraction (curr);
+    swap = FALSE;
+    time = xaccTransGetDate (trans);
+    price = gnc_pricedb_lookup_day_t64 (pricedb, comm, curr, time);
+    if (gnc_commodity_equiv (comm, gnc_price_get_currency (price)))
+        swap = TRUE;
+
+    if (price)
+    {
+        price_value = gnc_price_get_value (price);
+        if (gnc_numeric_equal (swap ? gnc_numeric_invert (value) : value,
+                               price_value))
+        {
+            gnc_price_unref (price);
+            return;
+        }
+        if (gnc_price_get_source (price) < source)
+        {
+            /* Existing price is preferred over this one. */
+            gnc_price_unref (price);
+            return;
+        }
+        if (swap)
+        {
+            value = gnc_numeric_invert (value);
+            scu = gnc_commodity_get_fraction (comm);
+        }
+        value = gnc_numeric_convert (value, scu * COMMODITY_DENOM_MULT,
+                                     GNC_HOW_RND_ROUND_HALF_UP);
+        gnc_price_begin_edit (price);
+        gnc_price_set_time64 (price, time);
+        gnc_price_set_source (price, source);
+        gnc_price_set_typestr (price, PRICE_TYPE_TRN);
+        gnc_price_set_value (price, value);
+        gnc_price_commit_edit (price);
+        gnc_price_unref (price);
+        return;
+    }
+
+    value = gnc_numeric_convert (value, scu * COMMODITY_DENOM_MULT,
+                                 GNC_HOW_RND_ROUND_HALF_UP);
+    price = gnc_price_create (book);
+    gnc_price_begin_edit (price);
+    gnc_price_set_commodity (price, comm);
+    gnc_price_set_currency (price, curr);
+    gnc_price_set_time64 (price, time);
+    gnc_price_set_source (price, source);
+    gnc_price_set_typestr (price, PRICE_TYPE_TRN);
+    gnc_price_set_value (price, value);
+    gnc_pricedb_add_price (pricedb, price);
+    gnc_price_commit_edit (price);
+}
+
+void
+xaccTransRecordPrice (Transaction *trans, PriceSource source)
+{
+   /* XXX: This should have been part of xaccSplitCommitEdit. */
+   for (GList *n = xaccTransGetSplitList (trans); n; n = n->next)
+      record_price (n->data, source);
+}
 
 /********************************************************************\
 \********************************************************************/
@@ -3020,9 +3127,9 @@ gboolean xaccTransRegister (void)
                 (QofSetterFunc)qofTransSetNotes
             },
             {
-                TRANS_ASSOCIATION, QOF_TYPE_STRING,
-                (QofAccessFunc)xaccTransGetAssociation,
-                (QofSetterFunc)xaccTransSetAssociation
+                TRANS_DOCLINK, QOF_TYPE_STRING,
+                (QofAccessFunc)xaccTransGetDocLink,
+                (QofSetterFunc)xaccTransSetDocLink
             },
             {
                 TRANS_IS_CLOSING, QOF_TYPE_BOOLEAN,

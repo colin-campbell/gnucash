@@ -390,7 +390,8 @@ gnc_customer_window_cancel_cb (GtkWidget *widget, gpointer data)
 void
 gnc_customer_window_help_cb (GtkWidget *widget, gpointer data)
 {
-    gnc_gnome_help(HF_HELP, HL_USAGE_CUSTOMER);
+    CustomerWindow *cw = data;
+    gnc_gnome_help (GTK_WINDOW(cw->dialog), HF_HELP, HL_USAGE_CUSTOMER);
 }
 
 void
@@ -577,8 +578,9 @@ gnc_customer_new_window (GtkWindow *parent, QofBook *bookp, GncCustomer *cust)
     cw->dialog = GTK_WIDGET (gtk_builder_get_object (builder, "customer_dialog"));
     gtk_window_set_transient_for (GTK_WINDOW(cw->dialog), parent);
 
-    // Set the style context for this dialog so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(cw->dialog), "GncCustomerDialog");
+    // Set the name for this dialog so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(cw->dialog), "gnc-id-customer");
+    gnc_widget_style_context_add_class (GTK_WIDGET(cw->dialog), "gnc-class-customers");
 
     g_object_set_data (G_OBJECT (cw->dialog), "dialog_info", cw);
 
@@ -963,7 +965,7 @@ gnc_customer_search (GtkWindow *parent, GncCustomer *start, QofBook *book)
                                      params, columns, q, q2, buttons, NULL,
                                      new_customer_cb, sw, free_userdata_cb,
                                      GNC_PREFS_GROUP_SEARCH, NULL,
-                                     "GncFindCustomerDialog");
+                                     "gnc-class-customers");
 }
 
 GNCSearchWindow *

@@ -22,11 +22,11 @@
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  *                                                                  *
 \********************************************************************/
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
-
-#include <glib.h>
 #include <stdlib.h>
 #include <string.h>
 #include <AccountP.h>
@@ -207,7 +207,7 @@ account_id_handler (xmlNodePtr node, gpointer act_pdata)
 
     xaccAccountSetGUID (pdata->account, guid);
 
-    g_free (guid);
+    guid_free (guid);
 
     return TRUE;
 }
@@ -322,7 +322,7 @@ deprecated_account_security_handler (xmlNodePtr node, gpointer act_pdata)
 
     PWARN ("Account %s: Obsolete xml tag 'act:security' will not be preserved.",
            xaccAccountGetName (pdata->account));
-    /* If the account has both a commodity and a security elemet, and
+    /* If the account has both a commodity and a security element, and
        the commodity is a currecny, then the commodity is probably
        wrong. In that case we want to replace it with the
        security. jralls 2010-11-02 */
@@ -384,7 +384,7 @@ account_parent_handler (xmlNodePtr node, gpointer act_pdata)
 
     gnc_account_append_child (parent, pdata->account);
 
-    g_free (gid);
+    guid_free (gid);
 
     return TRUE;
 }

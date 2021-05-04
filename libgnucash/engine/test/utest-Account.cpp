@@ -19,11 +19,12 @@
  * 51 Franklin Street, Fifth Floor    Fax:    +1-617-542-2652       *
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  ********************************************************************/
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
 #include <string.h>
-#include <glib.h>
 #include <unittest-support.h>
 #include <gnc-event.h>
 #include <gnc-date.h>
@@ -546,7 +547,7 @@ test_gnc_account_create_and_destroy (void)
     GNCAccountType type;
     gnc_commodity *commo;
     gint commo_scu, mark;
-    gboolean non_std_scu, sort_dirty, bal_dirty, tax_rel, hide, hold;
+    gboolean non_std_scu, sort_dirty, bal_dirty, opening_balance, tax_rel, hide, hold;
     gint64 copy_num;
     gnc_numeric *start_bal, *start_clr_bal, *start_rec_bal;
     gnc_numeric *end_bal, *end_clr_bal, *end_rec_bal;
@@ -571,6 +572,7 @@ test_gnc_account_create_and_destroy (void)
                   "end-balance", &end_bal,
                   "end-cleared-balance", &end_clr_bal,
                   "end-reconciled-balance", &end_rec_bal,
+                  "opening-balance", &opening_balance,
                   "policy", &pol,
                   "acct-mark", &mark,
                   "tax-related", &tax_rel,
@@ -599,6 +601,7 @@ test_gnc_account_create_and_destroy (void)
     g_assert (gnc_numeric_zero_p (*start_bal));
     g_assert (gnc_numeric_zero_p (*start_clr_bal));
     g_assert (gnc_numeric_zero_p (*start_rec_bal));
+    g_assert (!opening_balance);
     g_assert (pol == xaccGetFIFOPolicy ());
     g_assert (!mark);
     g_assert (!tax_rel);
@@ -850,8 +853,8 @@ acc_free
 static void
 test_xaccFreeAccount (Fixture *fixture, gconstpointer pData)
 {
-    auto msg1 = "[xaccFreeAccount()]  instead of calling xaccFreeAccount(), please call \n"
-                  " xaccAccountBeginEdit(); xaccAccountDestroy(); \n";
+    auto msg1 = "[xaccFreeAccount()]  instead of calling xaccFreeAccount(), please call\n"
+                  " xaccAccountBeginEdit(); xaccAccountDestroy();\n";
 #ifdef USE_CLANG_FUNC_SIG
 #define _func "int xaccTransGetSplitIndex(const Transaction *, const Split *)"
 #else
@@ -939,7 +942,7 @@ No test, just a pass-through.
 /* acc_free
 static void acc_free (QofInstance *inst)// 2
 ***Callback for qof_commit_edit_part2
-No test, just a passthrough -- plus see comment at test_xaccFreeAccount, which is what this is a passtrough of.
+No test, just a passthrough -- plus see comment at test_xaccFreeAccount, which is what this is a passthrough of.
 */
 /* static void
 test_acc_free (Fixture *fixture, gconstpointer pData)
@@ -964,8 +967,8 @@ Also tests:
 static void
 test_xaccAccountCommitEdit (Fixture *fixture, gconstpointer pData)
 {
-    auto msg1 = "[xaccFreeAccount()]  instead of calling xaccFreeAccount(), please call \n"
-                  " xaccAccountBeginEdit(); xaccAccountDestroy(); \n";
+    auto msg1 = "[xaccFreeAccount()]  instead of calling xaccFreeAccount(), please call\n"
+                  " xaccAccountBeginEdit(); xaccAccountDestroy();\n";
 #ifdef USE_CLANG_FUNC_SIG
 #define _func "int xaccTransGetSplitIndex(const Transaction *, const Split *)"
 #else
@@ -2248,9 +2251,8 @@ test_xaccAccountType_Compatibility (void)
     auto check2 = test_error_struct_new(logdomain, loglevel, msg2);
     gint loghandler;
 
-    for (type = ACCT_TYPE_BANK; type < NUM_ACCOUNT_TYPES; type = ++type)
+    for (type = ACCT_TYPE_BANK; type < NUM_ACCOUNT_TYPES; ++type)
     {
-        GNCAccountType child;
         if (type == ACCT_TYPE_ROOT)
         {
             loghandler = g_log_set_handler (logdomain, loglevel,
@@ -2275,11 +2277,11 @@ test_xaccAccountType_Compatibility (void)
             g_assert_cmpint (compat, == , equity_compat);
         else if (type == ACCT_TYPE_TRADING)
             g_assert_cmpint (compat, == , trading_compat);
-        for (child = ACCT_TYPE_NONE; child < ACCT_TYPE_LAST; child = ++child)
-            if (1 << child & compat)
-                g_assert (xaccAccountTypesCompatible (type, child));
+        for (auto parent = ACCT_TYPE_NONE; parent < ACCT_TYPE_LAST; ++parent)
+            if (1 << parent & compat)
+                g_assert (xaccAccountTypesCompatible (parent, type));
             else
-                g_assert (!xaccAccountTypesCompatible (type, child));
+                g_assert (!xaccAccountTypesCompatible (parent, type));
 
         compat = xaccAccountTypesCompatibleWith (type);
         if (type <= ACCT_TYPE_LIABILITY ||

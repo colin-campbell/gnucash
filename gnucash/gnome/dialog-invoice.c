@@ -70,9 +70,14 @@
 
 #include "gnc-plugin-business.h"
 #include "gnc-plugin-page-invoice.h"
+#include "gnc-plugin-page-report.h"
 #include "gnc-main-window.h"
+#include "gnc-state.h"
 
+#include "dialog-doclink.h"
+#include "dialog-doclink-utils.h"
 #include "dialog-transfer.h"
+#include "gnc-uri-utils.h"
 
 /* Disable -Waddress.  GCC 4.2 warns (and fails to compile with -Werror) when
  * passing the address of a guid on the stack to QOF_BOOK_LOOKUP_ENTITY via
@@ -141,6 +146,7 @@ struct _invoice_window
 
     GtkWidget  * dialog;         /* Used by 'New Invoice Window' */
     GncPluginPage *page;        /* Used by 'Edit Invoice' Page */
+    const gchar * page_state_name;    /* Used for loading open state information */
 
     /* Summary Bar Widgets */
     GtkWidget  * total_label;
@@ -153,6 +159,7 @@ struct _invoice_window
     GtkWidget  * info_label; /*Default in glade is "Invoice Information"*/
     GtkWidget  * id_label; /* Default in glade is Invoice ID */
     GtkWidget  * type_label;
+    GtkWidget  * type_label_hbox;
     GtkWidget  * type_hbox;
     GtkWidget  * type_choice;
     GtkWidget  * id_entry;
@@ -162,7 +169,9 @@ struct _invoice_window
     GtkWidget  * posted_date;
     GtkWidget  * active_check;
     GtkWidget  * paid_label;
-    
+
+    GtkWidget  * doclink_button;
+
     GtkWidget  * owner_box;
     GtkWidget  * owner_label;
     GtkWidget  * owner_choice;
@@ -203,6 +212,11 @@ struct _invoice_window
     GncOwner     proj_cust;
     GncOwner     proj_job;
 
+    /* the cached reportPage for this invoice. note this is not saved
+       into .gcm file therefore the invoice editor->report link is lost
+       upon restart. */
+    GncPluginPage *reportPage;
+
     /* for Unposting */
     gboolean     reset_tax_tables;
 };
@@ -226,12 +240,12 @@ static GtkWidget *
 iw_get_window (InvoiceWindow *iw)
 {
     if (iw->page)
-        return gnc_plugin_page_get_window(iw->page);
+        return gnc_plugin_page_get_window (iw->page);
     return iw->dialog;
 }
 
 GtkWidget *
-gnc_invoice_get_register(InvoiceWindow *iw)
+gnc_invoice_get_register (InvoiceWindow *iw)
 {
     if (iw)
         return (GtkWidget *)iw->reg;
@@ -239,7 +253,7 @@ gnc_invoice_get_register(InvoiceWindow *iw)
 }
 
 GtkWidget *
-gnc_invoice_get_notes(InvoiceWindow *iw)
+gnc_invoice_get_notes (InvoiceWindow *iw)
 {
     if (iw)
         return (GtkWidget *)iw->notes_text;
@@ -256,14 +270,29 @@ iw_ask_unpost (InvoiceWindow *iw)
     GtkToggleButton *toggle;
     GtkBuilder *builder;
     gint response;
+    const gchar *style_label = NULL;
+    GncOwnerType owner_type = gncOwnerGetType (&iw->owner);
+
 
     builder = gtk_builder_new();
     gnc_builder_add_from_file (builder, "dialog-invoice.glade", "unpost_message_dialog");
     dialog = GTK_WIDGET (gtk_builder_get_object (builder, "unpost_message_dialog"));
     toggle = GTK_TOGGLE_BUTTON(gtk_builder_get_object (builder, "yes_tt_reset"));
 
-    // Set the style context for this dialog so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(dialog), "GncInvoiceDialog");
+    switch (owner_type)
+    {
+        case GNC_OWNER_VENDOR:
+            style_label = "gnc-class-vendors";
+            break;
+        case GNC_OWNER_EMPLOYEE:
+            style_label = "gnc-class-employees";
+            break;
+        default:
+            style_label = "gnc-class-customers";
+            break;
+    }
+    // Set a secondary style context for this page so it can be easily manipulated with css
+    gnc_widget_style_context_add_class (GTK_WIDGET(dialog), style_label);
 
     gtk_window_set_transient_for (GTK_WINDOW(dialog),
                                   GTK_WINDOW(iw_get_window(iw)));
@@ -293,6 +322,24 @@ iw_get_invoice (InvoiceWindow *iw)
         return NULL;
 
     return gncInvoiceLookup (iw->book, &iw->invoice_guid);
+}
+
+GncInvoice *
+gnc_invoice_window_get_invoice (InvoiceWindow *iw)
+{
+    if (!iw)
+        return NULL;
+
+    return iw_get_invoice (iw);
+}
+
+GtkWidget *
+gnc_invoice_window_get_doclink_button (InvoiceWindow *iw)
+{
+    if (!iw)
+        return NULL;
+
+    return iw->doclink_button;
 }
 
 static void
@@ -422,10 +469,10 @@ gnc_invoice_window_verify_ok (InvoiceWindow *iw)
     {
         gnc_error_dialog (GTK_WINDOW (iw_get_window(iw)), "%s",
                           /* Translators: In this context,
-                           * 'Billing information' maps to the
-                           * label in the frame and means
-                           * e.g. customer i.e. the company being
-                           * invoiced. */
+                             'Billing information' maps to the
+                             label in the frame and means
+                             e.g. customer i.e. the company being
+                             invoiced. */
                           _("You need to supply Billing Information."));
         return FALSE;
     }
@@ -497,7 +544,75 @@ gnc_invoice_window_cancel_cb (GtkWidget *widget, gpointer data)
 void
 gnc_invoice_window_help_cb (GtkWidget *widget, gpointer data)
 {
-    gnc_gnome_help(HF_HELP, HL_USAGE_INVOICE);
+    InvoiceWindow *iw = data;
+    GncOwnerType owner_type = gncOwnerGetType (&iw->owner);
+
+    switch(owner_type)
+    {
+        case GNC_OWNER_CUSTOMER:
+           gnc_gnome_help (GTK_WINDOW(iw->dialog), HF_HELP, HL_USAGE_INVOICE);
+           break;
+        case GNC_OWNER_VENDOR:
+           gnc_gnome_help (GTK_WINDOW(iw->dialog), HF_HELP, HL_USAGE_BILL);
+           break;
+        default:
+           gnc_gnome_help (GTK_WINDOW(iw->dialog), HF_HELP, HL_USAGE_VOUCHER);
+           break;
+    }
+}
+
+static const gchar *
+gnc_invoice_window_get_state_group (InvoiceWindow *iw)
+{
+    switch (gncOwnerGetType (gncOwnerGetEndOwner (&iw->owner)))
+    {
+        case GNC_OWNER_VENDOR:
+            return "Vendor documents";
+            break;
+        case GNC_OWNER_EMPLOYEE:
+            return "Employee documents";
+            break;
+        default:
+            return "Customer documents";
+            break;
+    }
+}
+
+/* Save user state layout information for Invoice/Bill/Voucher
+ * documents so it can be used for the default user set layout
+ */
+void
+gnc_invoice_window_save_document_layout_to_user_state (InvoiceWindow *iw)
+{
+    Table *table = gnc_entry_ledger_get_table (iw->ledger);
+    const gchar *group = gnc_invoice_window_get_state_group (iw);
+
+    gnc_table_save_state (table, group);
+}
+
+/* Removes the user state layout information for Invoice/Bill/Voucher
+ * documents and also resets the current layout to the built-in defaults
+ */
+void
+gnc_invoice_window_reset_document_layout_and_clear_user_state (InvoiceWindow *iw)
+{
+    GnucashRegister *reg = iw->reg;
+    const gchar *group = gnc_invoice_window_get_state_group (iw);
+
+    gnucash_register_reset_sheet_layout (reg);
+    gnc_state_drop_sections_for (group);
+}
+
+/* Checks to see if there is user state layout information for
+ * Invoice/Bill/Voucher documents so it can be used for the
+ * default user layout
+ */
+gboolean
+gnc_invoice_window_document_has_user_state (InvoiceWindow *iw)
+{
+    GKeyFile *state_file = gnc_state_get_current ();
+    const gchar *group = gnc_invoice_window_get_state_group (iw);
+    return g_key_file_has_group (state_file, group);
 }
 
 void
@@ -517,9 +632,9 @@ gnc_invoice_window_destroy_cb (GtkWidget *widget, gpointer data)
         iw->invoice_guid = *guid_null ();
     }
 
+    gtk_widget_destroy(widget);
     gnc_entry_ledger_destroy (iw->ledger);
     gnc_unregister_gui_component (iw->component_id);
-    gtk_widget_destroy(widget);
     gnc_resume_gui_refresh ();
 
     g_free (iw);
@@ -672,20 +787,21 @@ gnc_invoice_window_blankCB (GtkWidget *widget, gpointer data)
     }
 }
 
-static void
+static GncPluginPage *
 gnc_invoice_window_print_invoice(GtkWindow *parent, GncInvoice *invoice)
 {
     SCM func, arg, arg2;
     SCM args = SCM_EOL;
     int report_id;
     const char *reportname = gnc_plugin_business_get_invoice_printreport();
+    GncPluginPage *reportPage = NULL;
 
-    g_return_if_fail (invoice);
+    g_return_val_if_fail (invoice, NULL);
     if (!reportname)
         reportname = "5123a759ceb9483abf2182d01c140e8d"; // fallback if the option lookup failed
 
     func = scm_c_eval_string ("gnc:invoice-report-create");
-    g_return_if_fail (scm_is_procedure (func));
+    g_return_val_if_fail (scm_is_procedure (func), NULL);
 
     arg = SWIG_NewPointerObj(invoice, SWIG_TypeQuery("_p__gncInvoice"), 0);
     arg2 = scm_from_utf8_string(reportname);
@@ -694,18 +810,37 @@ gnc_invoice_window_print_invoice(GtkWindow *parent, GncInvoice *invoice)
     /* scm_gc_protect_object(func); */
 
     arg = scm_apply (func, args, SCM_EOL);
-    g_return_if_fail (scm_is_exact (arg));
+    g_return_val_if_fail (scm_is_exact (arg), NULL);
     report_id = scm_to_int (arg);
 
     /* scm_gc_unprotect_object(func); */
     if (report_id >= 0)
-        reportWindow (report_id, parent);
+    {
+        reportPage = gnc_plugin_page_report_new (report_id);
+        gnc_main_window_open_page (GNC_MAIN_WINDOW (parent), reportPage);
+    }
+
+    return reportPage;
 }
+
+/* From the invoice editor, open the invoice report. This will reuse the
+   invoice report if generated from the current invoice editor. Note the
+   link is lost when GnuCash is restarted. This link may be restored
+   by: scan the current session tabs, identify reports, checking
+   whereby report's report-type matches an invoice report, and the
+   report's invoice option value matches the current invoice. */
 void
 gnc_invoice_window_printCB (GtkWindow* parent, gpointer data)
 {
     InvoiceWindow *iw = data;
-    gnc_invoice_window_print_invoice (parent, iw_get_invoice (iw));
+
+    if (iw->reportPage && GNC_IS_PLUGIN_PAGE (iw->reportPage))
+        gnc_plugin_page_report_reload (GNC_PLUGIN_PAGE_REPORT (iw->reportPage));
+    else
+        iw->reportPage = gnc_invoice_window_print_invoice
+            (parent, iw_get_invoice (iw));
+
+    gnc_main_window_open_page (GNC_MAIN_WINDOW (iw->dialog), iw->reportPage);
 }
 
 static gboolean
@@ -1067,6 +1202,14 @@ void gnc_invoice_window_new_invoice_cb (GtkWindow *parent, gpointer data)
 
 void gnc_business_call_owner_report (GtkWindow *parent, GncOwner *owner, Account *acc)
 {
+    gnc_business_call_owner_report_with_enddate (parent, owner, acc, INT64_MAX);
+}
+
+void gnc_business_call_owner_report_with_enddate (GtkWindow *parent,
+                                                  GncOwner *owner,
+                                                  Account *acc,
+                                                  time64 enddate)
+{
     int id;
     SCM args;
     SCM func;
@@ -1076,8 +1219,12 @@ void gnc_business_call_owner_report (GtkWindow *parent, GncOwner *owner, Account
 
     args = SCM_EOL;
 
-    func = scm_c_eval_string ("gnc:owner-report-create");
+    func = scm_c_eval_string ("gnc:owner-report-create-with-enddate");
     g_return_if_fail (scm_is_procedure (func));
+
+    /* set the enddate */
+    arg = (enddate != INT64_MAX) ? scm_from_int64 (enddate) : SCM_BOOL_F;
+    args = scm_cons (arg, args);
 
     if (acc)
     {
@@ -1260,6 +1407,7 @@ gnc_invoice_window_create_summary_bar (InvoiceWindow *iw)
 
     summarybar = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
     gtk_box_set_homogeneous (GTK_BOX (summarybar), FALSE);
+    gtk_widget_set_name (summarybar, "gnc-id-summarybar");
 
     iw->total_label           = add_summary_label (summarybar, _("Total:"));
 
@@ -1918,13 +2066,13 @@ gnc_invoice_update_window (InvoiceWindow *iw, GtkWidget *widget)
 
         /* Setup viewer for read-only access */
         gtk_widget_set_sensitive (acct_entry, FALSE);
-        gtk_widget_set_sensitive (iw->id_entry, FALSE);
+        gtk_widget_set_sensitive (iw->id_entry, FALSE); /* XXX: why set FALSE and then TRUE? */
         gtk_widget_set_sensitive (iw->id_entry, TRUE);
         gtk_widget_set_sensitive (iw->terms_menu, FALSE);
-        gtk_widget_set_sensitive (iw->owner_box, FALSE);
-        gtk_widget_set_sensitive (iw->job_box, FALSE);
+        gtk_widget_set_sensitive (iw->owner_box, TRUE);
+        gtk_widget_set_sensitive (iw->job_box, TRUE);
         gtk_widget_set_sensitive (iw->billing_id_entry, FALSE);
-        gtk_widget_set_sensitive (iw->notes_text, FALSE); /* XXX: should notes remain writable?*/
+        gtk_widget_set_sensitive (iw->notes_text, TRUE);
     }
     else           /* ! posted */
     {
@@ -1941,11 +2089,37 @@ gnc_invoice_update_window (InvoiceWindow *iw, GtkWidget *widget)
         gtk_label_set_text(GTK_LABEL(iw->paid_label),  _("PAID"));
     else
         gtk_label_set_text(GTK_LABEL(iw->paid_label),  _("UNPAID"));
-    
+
     if (widget)
         gtk_widget_show (widget);
     else
         gtk_widget_show (iw_get_window(iw));
+}
+
+GncInvoiceType
+gnc_invoice_get_type_from_window (InvoiceWindow *iw)
+{
+    /* uses the same approach as gnc_invoice_get_title
+       not called gnc_invoice_get_type because of name collisions
+    */
+    switch (gncOwnerGetType(&iw->owner))
+    {
+    case GNC_OWNER_CUSTOMER:
+        return iw->is_credit_note ? GNC_INVOICE_CUST_CREDIT_NOTE
+                                  : GNC_INVOICE_CUST_INVOICE;
+        break;
+    case GNC_OWNER_VENDOR:
+        return iw->is_credit_note ? GNC_INVOICE_VEND_CREDIT_NOTE
+                                  : GNC_INVOICE_VEND_INVOICE;
+        break;
+    case GNC_OWNER_EMPLOYEE:
+        return iw->is_credit_note ? GNC_INVOICE_EMPL_CREDIT_NOTE
+                                  : GNC_INVOICE_EMPL_INVOICE;
+        break;
+    default:
+        return GNC_INVOICE_UNDEFINED;
+        break;
+    }
 }
 
 gchar *
@@ -2079,7 +2253,7 @@ find_handler (gpointer find_data, gpointer user_data)
 static InvoiceWindow *
 gnc_invoice_new_page (QofBook *bookp, InvoiceDialogType type,
                       GncInvoice *invoice, const GncOwner *owner,
-                      GncMainWindow *window)
+                      GncMainWindow *window, const gchar *group_name)
 {
     InvoiceWindow *iw;
     GncOwner *billto;
@@ -2115,6 +2289,7 @@ gnc_invoice_new_page (QofBook *bookp, InvoiceDialogType type,
     iw->invoice_guid = *gncInvoiceGetGUID (invoice);
     iw->is_credit_note = gncInvoiceGetIsCreditNote (invoice);
     iw->width = -1;
+    iw->page_state_name = group_name;
 
     /* Save this for later */
     gncOwnerCopy (gncOwnerGetEndOwner (owner), &(iw->owner));
@@ -2126,9 +2301,8 @@ gnc_invoice_new_page (QofBook *bookp, InvoiceDialogType type,
 
     /* Now create the plugin page for this invoice and display it. */
     new_page = gnc_plugin_page_invoice_new (iw);
-    if (window)
-        gnc_plugin_page_set_use_new_window (new_page, FALSE);
-    else
+
+    if (!window)
         window = gnc_plugin_business_get_window ();
 
     gnc_main_window_open_page (window, new_page);
@@ -2227,7 +2401,7 @@ gnc_invoice_recreate_page (GncMainWindow *window,
     g_free(tmp_string);
     g_free(owner_type);
 
-    iw = gnc_invoice_new_page (book, type, invoice, &owner, window);
+    iw = gnc_invoice_new_page (book, type, invoice, &owner, window, group_name);
     return iw->page;
 
 give_up:
@@ -2246,6 +2420,7 @@ gnc_invoice_save_page (InvoiceWindow *iw,
                        GKeyFile *key_file,
                        const gchar *group_name)
 {
+    Table *table = gnc_entry_ledger_get_table (iw->ledger);
     gchar guidstr[GUID_ENCODING_LENGTH+1];
     guid_to_string_buff(&iw->invoice_guid, guidstr);
     g_key_file_set_string(key_file, group_name, KEY_INVOICE_TYPE,
@@ -2266,6 +2441,17 @@ gnc_invoice_save_page (InvoiceWindow *iw,
         guid_to_string_buff(gncOwnerGetGUID(&iw->owner), guidstr);
         g_key_file_set_string(key_file, group_name, KEY_OWNER_GUID, guidstr);
     }
+    // save the open table layout
+    gnc_table_save_state (table, group_name);
+}
+
+static gboolean
+doclink_button_cb (GtkLinkButton *button, InvoiceWindow *iw)
+{
+    GncInvoice *invoice = gncInvoiceLookup (iw->book, &iw->invoice_guid);
+    gnc_doclink_open_uri (GTK_WINDOW(iw->dialog), gncInvoiceGetDocLink (invoice));
+
+    return TRUE;
 }
 
 GtkWidget *
@@ -2279,6 +2465,8 @@ gnc_invoice_create_page (InvoiceWindow *iw, gpointer page)
     GncEntryLedgerType ledger_type;
     const gchar *prefs_group = NULL;
     gboolean is_credit_note = FALSE;
+    const gchar *style_label = NULL;
+    const gchar *doclink_uri;
 
     invoice = gncInvoiceLookup (iw->book, &iw->invoice_guid);
     is_credit_note = gncInvoiceGetIsCreditNote (invoice);
@@ -2290,9 +2478,6 @@ gnc_invoice_create_page (InvoiceWindow *iw, gpointer page)
     gnc_builder_add_from_file (builder, "dialog-invoice.glade", "terms_store");
     gnc_builder_add_from_file (builder, "dialog-invoice.glade", "invoice_entry_vbox");
     dialog = GTK_WIDGET (gtk_builder_get_object (builder, "invoice_entry_vbox"));
-
-    // Set the style context for this dialog so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(dialog), "GncInvoiceDialog");
 
     /* Autoconnect all the signals */
     gtk_builder_connect_signals_full (builder, gnc_builder_connect_full_func, iw);
@@ -2312,7 +2497,26 @@ gnc_invoice_create_page (InvoiceWindow *iw, gpointer page)
     iw->job_box = GTK_WIDGET (gtk_builder_get_object (builder, "page_job_hbox"));
     iw->paid_label = GTK_WIDGET (gtk_builder_get_object (builder, "paid_label"));
 
-    // Set the style context for this label so it can be easily manipulated with css
+    iw->doclink_button = GTK_WIDGET(gtk_builder_get_object (builder, "doclink_button"));
+    g_signal_connect (G_OBJECT (iw->doclink_button), "activate-link",
+                      G_CALLBACK (doclink_button_cb), iw);
+
+    /* invoice doclink */
+    doclink_uri = gncInvoiceGetDocLink (invoice);
+    if (doclink_uri)
+    {
+        gchar *display_uri = gnc_doclink_get_unescaped_just_uri (doclink_uri);
+        gtk_button_set_label (GTK_BUTTON (iw->doclink_button),
+                              _("Open Linked Document:"));
+        gtk_link_button_set_uri (GTK_LINK_BUTTON (iw->doclink_button),
+                                 display_uri);
+        gtk_widget_show (GTK_WIDGET (iw->doclink_button));
+        g_free (display_uri);
+    }
+    else
+        gtk_widget_hide (GTK_WIDGET (iw->doclink_button));
+
+    // Add a style context for this label so it can be easily manipulated with css
     gnc_widget_style_context_add_class (GTK_WIDGET(iw->paid_label), "gnc-class-highlight");
 
     /* grab the project widgets */
@@ -2415,19 +2619,25 @@ gnc_invoice_create_page (InvoiceWindow *iw, gpointer page)
     }
     /* Default labels are for invoices, change them if they are anything else. */
     switch (owner_type)
-        {
+    {
         case GNC_OWNER_VENDOR:
             gtk_label_set_text (GTK_LABEL(iw->info_label),  _("Bill Information"));
             gtk_label_set_text (GTK_LABEL(iw->type_label),  _("Bill"));
             gtk_label_set_text (GTK_LABEL(iw->id_label),  _("Bill ID"));
+            style_label = "gnc-class-vendors";
             break;
         case GNC_OWNER_EMPLOYEE:
             gtk_label_set_text (GTK_LABEL(iw->info_label),  _("Voucher Information"));
             gtk_label_set_text (GTK_LABEL(iw->type_label),  _("Voucher"));
             gtk_label_set_text (GTK_LABEL(iw->id_label),  _("Voucher ID"));
-        default:
+            style_label = "gnc-class-employees";
             break;
-        }
+        default:
+            style_label = "gnc-class-customers";
+            break;
+    }
+    // Set a secondary style context for this page so it can be easily manipulated with css
+    gnc_widget_style_context_add_class (GTK_WIDGET(dialog), style_label);
 
     entry_ledger = gnc_entry_ledger_new (iw->book, ledger_type);
 
@@ -2455,10 +2665,18 @@ gnc_invoice_create_page (InvoiceWindow *iw, gpointer page)
     /* Create the register */
     {
         GtkWidget *regWidget, *frame, *window;
+        const gchar *default_group = gnc_invoice_window_get_state_group (iw);
+        const gchar *group;
+
+        // if this is from a page recreate, use those settings
+        if (iw->page_state_name)
+            group = iw->page_state_name;
+        else
+            group = default_group;
 
         /* Watch the order of operations, here... */
         regWidget = gnucash_register_new (gnc_entry_ledger_get_table
-                                          (entry_ledger), NULL);
+                                          (entry_ledger), group);
         gtk_widget_show(regWidget);
 
         frame = GTK_WIDGET (gtk_builder_get_object (builder, "ledger_frame"));
@@ -2487,6 +2705,36 @@ gnc_invoice_create_page (InvoiceWindow *iw, gpointer page)
     return dialog;
 }
 
+void
+gnc_invoice_update_doclink_for_window (GncInvoice *invoice, const gchar *uri)
+{
+    InvoiceWindow *iw = gnc_plugin_page_invoice_get_window (invoice);
+
+    if (iw)
+    {
+        GtkWidget *doclink_button = gnc_invoice_window_get_doclink_button (iw);
+
+        if (g_strcmp0 (uri, "") == 0) // deleted uri
+        {
+            GtkAction *uri_action;
+
+            // update the menu actions
+            uri_action = gnc_plugin_page_get_action (GNC_PLUGIN_PAGE(iw->page), "BusinessLinkOpenAction");
+            gtk_action_set_sensitive (uri_action, FALSE);
+
+            gtk_widget_hide (doclink_button);
+        }
+        else
+        {
+            gchar *display_uri = gnc_doclink_get_unescaped_just_uri (uri);
+            gtk_link_button_set_uri (GTK_LINK_BUTTON (doclink_button),
+                                     display_uri);
+            gtk_widget_show (GTK_WIDGET (doclink_button));
+            g_free (display_uri);
+        }
+    }
+}
+
 static InvoiceWindow *
 gnc_invoice_window_new_invoice (GtkWindow *parent, InvoiceDialogType dialog_type, QofBook *bookp,
                                 const GncOwner *owner, GncInvoice *invoice)
@@ -2499,6 +2747,7 @@ gnc_invoice_window_new_invoice (GtkWindow *parent, InvoiceDialogType dialog_type
     const GncOwner *start_owner;
     GncBillTerm *owner_terms = NULL;
     GncOwnerType owner_type;
+    const gchar *style_label = NULL;
 
     g_assert (dialog_type == NEW_INVOICE || dialog_type == MOD_INVOICE || dialog_type == DUP_INVOICE);
 
@@ -2577,13 +2826,14 @@ gnc_invoice_window_new_invoice (GtkWindow *parent, InvoiceDialogType dialog_type
     iw->dialog = GTK_WIDGET (gtk_builder_get_object (builder, "new_invoice_dialog"));
     gtk_window_set_transient_for (GTK_WINDOW(iw->dialog), parent);
 
-    // Set the style context for this dialog so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(iw->dialog), "GncInvoiceDialog");
+    // Set the name for this dialog so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(iw->dialog), "gnc-id-invoice");
 
     g_object_set_data (G_OBJECT (iw->dialog), "dialog_info", iw);
 
     /* Grab the widgets */
     iw->type_label = GTK_WIDGET (gtk_builder_get_object (builder, "dialog_type_label"));
+    iw->type_label_hbox = GTK_WIDGET (gtk_builder_get_object (builder, "dialog_type_label_hbox"));
     iw->id_label = GTK_WIDGET (gtk_builder_get_object (builder, "label14"));
     iw->info_label = GTK_WIDGET (gtk_builder_get_object (builder, "label1"));
     invoice_radio = GTK_WIDGET (gtk_builder_get_object (builder, "dialog_invoice_type"));
@@ -2591,7 +2841,7 @@ gnc_invoice_window_new_invoice (GtkWindow *parent, InvoiceDialogType dialog_type
     iw->type_hbox = GTK_WIDGET (gtk_builder_get_object (builder, "dialog_type_choice_hbox"));
     iw->type_choice = GTK_WIDGET (gtk_builder_get_object (builder, "dialog_type_invoice"));
 
-    /* The default GUI lables are for invoices, so change them if it isn't. */
+    /* The default GUI labels are for invoices, so change them if it isn't. */
     owner_type = gncOwnerGetType (&iw->owner);
     switch(owner_type)
     {
@@ -2600,16 +2850,21 @@ gnc_invoice_window_new_invoice (GtkWindow *parent, InvoiceDialogType dialog_type
             gtk_label_set_text (GTK_LABEL(iw->type_label),  _("Bill"));
             gtk_button_set_label (GTK_BUTTON(invoice_radio),  _("Bill"));
             gtk_label_set_text (GTK_LABEL(iw->id_label),  _("Bill ID"));
-
+            style_label = "gnc-class-vendors";
             break;
         case GNC_OWNER_EMPLOYEE:
             gtk_label_set_text (GTK_LABEL(iw->info_label),  _("Voucher Information"));
             gtk_label_set_text (GTK_LABEL(iw->type_label),  _("Voucher"));
             gtk_button_set_label (GTK_BUTTON(invoice_radio),  _("Voucher"));
             gtk_label_set_text (GTK_LABEL(iw->id_label),  _("Voucher ID"));
+            style_label = "gnc-class-employees";
+            break;
         default:
+            style_label = "gnc-class-customers";
         break;
     }
+    // Set a secondary style context for this page so it can be easily manipulated with css
+    gnc_widget_style_context_add_class (GTK_WIDGET(iw->dialog), style_label);
 
     /* configure the type related widgets based on dialog type and invoice type */
     switch (dialog_type)
@@ -2617,10 +2872,12 @@ gnc_invoice_window_new_invoice (GtkWindow *parent, InvoiceDialogType dialog_type
     case NEW_INVOICE:
     case DUP_INVOICE:
         gtk_widget_show_all (iw->type_hbox);
+        gtk_widget_hide (iw->type_label_hbox);
         gtk_widget_hide (iw->type_label);
         break;
     case MOD_INVOICE:
         gtk_widget_hide (iw->type_hbox);
+        gtk_widget_show (iw->type_label_hbox);
         gtk_widget_show (iw->type_label);
         break;
     default:
@@ -2664,6 +2921,7 @@ gnc_invoice_window_new_invoice (GtkWindow *parent, InvoiceDialogType dialog_type
                                       iw);
 
     /* Setup initial values */
+    iw->reportPage = NULL;
     iw->invoice_guid = *gncInvoiceGetGUID (invoice);
     iw->is_credit_note = gncInvoiceGetIsCreditNote (invoice);
 
@@ -2723,7 +2981,7 @@ gnc_ui_invoice_edit (GtkWindow *parent, GncInvoice *invoice)
 
     iw = gnc_invoice_new_page (gncInvoiceGetBook(invoice), type,
                                invoice, gncInvoiceGetOwner (invoice),
-                               GNC_MAIN_WINDOW(gnc_ui_get_main_window (GTK_WIDGET (parent))));
+                               GNC_MAIN_WINDOW(gnc_ui_get_main_window (GTK_WIDGET (parent))), NULL);
 
     return iw;
 }
@@ -3123,7 +3381,7 @@ gnc_invoice_search (GtkWindow *parent, GncInvoice *start, GncOwner *owner, QofBo
                                                _("Due Date"), NULL, type,
                                                INVOICE_DUE, NULL);
         inv_params = gnc_search_param_prepend (inv_params,
-                                               _("Company Name "), NULL, type,
+                                               _("Company Name"), NULL, type,
                                                INVOICE_OWNER, OWNER_PARENT,
                                                OWNER_NAME, NULL);
         inv_params = gnc_search_param_prepend (inv_params,
@@ -3157,7 +3415,7 @@ gnc_invoice_search (GtkWindow *parent, GncInvoice *start, GncOwner *owner, QofBo
                                                 _("Due Date"), NULL, type,
                                                 INVOICE_DUE, NULL);
         bill_params = gnc_search_param_prepend (bill_params,
-                                                _("Company Name "), NULL, type,
+                                                _("Company Name"), NULL, type,
                                                 INVOICE_OWNER, OWNER_PARENT,
                                                 OWNER_NAME, NULL);
         bill_params = gnc_search_param_prepend (bill_params,
@@ -3301,21 +3559,21 @@ gnc_invoice_search (GtkWindow *parent, GncInvoice *start, GncOwner *owner, QofBo
     case GNC_OWNER_VENDOR:
         title = _("Find Bill");
         label = _("Bill");
-        style_class = "GncFindBillDialog";
+        style_class = "gnc-class-bills";
         params = bill_params;
         buttons = bill_buttons;
         break;
     case GNC_OWNER_EMPLOYEE:
         title = _("Find Expense Voucher");
         label = _("Expense Voucher");
-        style_class = "GncFindExpenseVoucherDialog";
+        style_class = "gnc-class-vouchers";
         params = emp_params;
         buttons = emp_buttons;
         break;
     default:
         title = _("Find Invoice");
         label = _("Invoice");
-        style_class = "GncFindInvoiceDialog";
+        style_class = "gnc-class-invoices";
         params = inv_params;
         buttons = inv_buttons;
         break;
@@ -3351,17 +3609,22 @@ gnc_invoice_show_docs_due (GtkWindow *parent, QofBook *book, double days_in_adva
         { NULL },
     };
 
+    if (!book)
+    {
+        PERR("No book, no due invoices.");
+        return NULL;
+    }
+
     /* Create the param list (in reverse order) */
     if (param_list == NULL)
     {
-        /* Translators: This abbreviation is the column heading for
-           the condition "Is this invoice a Credit Note?" */
-        param_list = gnc_search_param_prepend (param_list, _("CN?"), NULL, type,
-                                               INVOICE_IS_CN, NULL);
-        param_list = gnc_search_param_prepend (param_list, _("Amount"), NULL, type,
-                                               INVOICE_POST_LOT, LOT_BALANCE, NULL);
+        param_list = gnc_search_param_prepend_with_justify (param_list, _("Amount"),
+                                                            GTK_JUSTIFY_RIGHT, NULL, type,
+                                                            INVOICE_POST_LOT, LOT_BALANCE, NULL);
+        param_list = gnc_search_param_prepend (param_list, _("Type"), NULL, type,
+                                               INVOICE_TYPE_STRING, NULL);
         param_list = gnc_search_param_prepend (param_list, _("Company"), NULL, type,
-                                               INVOICE_OWNER, OWNER_NAME, NULL);
+                                               INVOICE_OWNER, OWNER_PARENT, OWNER_NAME, NULL);
         param_list = gnc_search_param_prepend (param_list, _("Due"), NULL, type,
                                                INVOICE_DUE, NULL);
     }

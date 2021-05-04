@@ -21,12 +21,13 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  *  02110-1301, USA.
  */
+#include <glib.h>
+#include <glib/gstdio.h>
+
 extern "C"
 {
 #include <config.h>
 
-#include <glib.h>
-#include <glib/gstdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
@@ -46,7 +47,7 @@ extern "C"
 #include "test-file-stuff.h"
 #include "test-stuff.h"
 
-static QofSession* session;
+static QofSession* session = NULL;
 static int iter;
 
 static gboolean
@@ -126,9 +127,10 @@ test_generation (void)
     for (iter = 0; iter < 20; iter++)
     {
         GNCPriceDB* db;
+        auto book = qof_book_new();
         g_message ("iter=%d", iter);
-        session = qof_session_new ();
-        db = get_random_pricedb (qof_session_get_book (session));
+        session = qof_session_new (book);
+        db = get_random_pricedb (book);
         if (!db)
         {
             failure_args ("gnc_random_price_db returned NULL",
@@ -151,7 +153,6 @@ main (int argc, char** argv)
     //qof_log_init_filename("/tmp/gnctest.trace");
     //qof_log_set_default(QOF_LOG_DETAIL);
     //qof_log_set_level(GNC_MOD_PRICE, QOF_LOG_DETAIL);
-    session = qof_session_new ();
     test_generation ();
     print_test_results ();
     qof_close ();

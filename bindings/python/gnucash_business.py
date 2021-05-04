@@ -248,7 +248,7 @@ methods_return_instance_lists(
 
 # Customer
 Customer.add_constructor_and_methods_with_prefix('gncCustomer', 'Create')
-Customer.add_method('gncOwnerApplyPayment', 'ApplyPayment')
+Customer.add_method('gncOwnerApplyPaymentSecs', 'ApplyPayment')
 
 customer_dict = {
                     'GetAddr' : Address,
@@ -327,6 +327,7 @@ methods_return_instance_lists(
     Invoice, { 'GetEntries': Entry })
 
 Invoice.add_method('gncInvoiceRemoveEntry', 'RemoveEntry')
+Invoice.add_method('gncInvoiceUnpost', 'Unpost')
 
 # Bill
 Bill.add_methods_with_prefix('gncBill')

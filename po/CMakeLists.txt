@@ -2,60 +2,45 @@ add_subdirectory(glossary)
 
 # Set of available languages:
 # * managed at the Translation Project (TP):
-set (TP_LINGUAS az ca cs da eu fa ja nl ro rw sk sr sv tr uk zh_CN)
-# * already marked as external at TP:
-set (GC_LINGUAS ar bg de el en_GB es fi fr gu he hi hu it kn ko lt lv mr nb ne pl pt pt_BR ru ta te ur vi zh_TW)
+set (TP_LINGUAS ca cs da eu fa pt ro rw sk sr sv uk)
+# * already marked as external at TP or they have no language team:
+set (GC_LINGUAS ar as az bg brx de doi el en_GB es es_NI et fi fr gu he hi hr hu id it ja kn ko kok kok@latin ks lt lv mai mni mni@bengali mr nb ne nl pl pt_BR ru ta te tr ur vi zh_CN zh_TW)
 # * New or unmarked: The release manager should announce them to TP 
 # and when listed there move in the respective group above.
-set (NEW_LINGUAS as brx doi es_NI hr kok kok@latin ks mai mni mni@bengali)
+set (NEW_LINGUAS)
 
 set (ALL_LINGUAS ${TP_LINGUAS} ${GC_LINGUAS} ${NEW_LINGUAS})
-
-file (WRITE LINGUAS "${ALL_LINGUAS}")
+# LINGUAS is used to create localized destkop and appdata files
+string(REPLACE ";" " " LINGUAS "${ALL_LINGUAS}")
+file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/LINGUAS "${LINGUAS}")
 
 set (CATALOGS "")
-set (BUILD_CATALOGS "")
+set (po_SOURCES "")
 
-set(po_SOURCES "")
-file (WRITE LINGUAS "")
-foreach(lingua ${ALL_LINGUAS})
-  list(APPEND po_SOURCES ${lingua}.po)
-  file (APPEND LINGUAS "${lingua} ")
-endforeach()
+foreach (lingua ${ALL_LINGUAS})
+  list (APPEND po_SOURCES ${lingua}.po)
+
+  set (_LOCALE_DIR ${DATADIR_BUILD}/locale/${lingua}/LC_MESSAGES)
+  file (MAKE_DIRECTORY "${_LOCALE_DIR}") # Unix Makefiles won't do this automatically, ninja does
+  set (_MO_FILE ${_LOCALE_DIR}/gnucash.mo)
+  list (APPEND CATALOGS ${_MO_FILE})
+
+  add_custom_command(
+      OUTPUT ${_MO_FILE}
+      COMMAND ${CMAKE_COMMAND} -E env
+        ${GETTEXT_MSGFMT_EXECUTABLE}
+            -o ${_MO_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/${lingua}.po
+      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${lingua}.po
+  )
+
+  install (FILES ${_MO_FILE} DESTINATION ${CMAKE_INSTALL_DATADIR}/locale/${lingua}/LC_MESSAGES)
+endforeach (lingua)
+
+add_custom_target(po-gmo ALL DEPENDS ${CATALOGS})
 
 set_local_dist(po_DIST_local ${po_SOURCES} CMakeLists.txt Makevars
   POTFILES.in POTFILES.skip README gnucash-pot.cmake)
 set(po_DIST ${po_DIST_local} ${po_glossary_DIST} PARENT_SCOPE)
-
-foreach(lingua ${ALL_LINGUAS})
-  set(_OUTPUT_FILE ${lingua}.mo)
-  list(APPEND CATALOGS ${_OUTPUT_FILE})
-  add_custom_command(
-      OUTPUT ${_OUTPUT_FILE}
-      COMMAND ${CMAKE_COMMAND} -E env
-        ${GETTEXT_MSGFMT_EXECUTABLE}
-            -o ${_OUTPUT_FILE} ${CMAKE_CURRENT_SOURCE_DIR}/${lingua}.po
-      DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${lingua}.po
-  )
-  set(_BUILD_FILE_DIR ${DATADIR_BUILD}/locale/${lingua}/LC_MESSAGES)
-  make_directory(${_BUILD_FILE_DIR})
-  set(_BUILD_FILE ${_BUILD_FILE_DIR}/gnucash.mo)
-  list(APPEND BUILD_CATALOGS ${_BUILD_FILE})
-  add_custom_command(
-    OUTPUT ${_BUILD_FILE}
-    COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/${lingua}.mo ${_BUILD_FILE}
-    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/${_OUTPUT_FILE}
-    #APPEND
-    )
-endforeach(lingua)
-
-add_custom_target(po-gmo ALL DEPENDS ${CATALOGS})
-add_custom_target(po-gmo-build ALL DEPENDS ${BUILD_CATALOGS})
-
-
-foreach(lingua ${ALL_LINGUAS})
-  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${lingua}.mo RENAME gnucash.mo DESTINATION ${CMAKE_INSTALL_DATADIR}/locale/${lingua}/LC_MESSAGES)
-endforeach(lingua)
 
 function(read_file_removing_comments OUTPUT PATH)
   set(RESULT "")
@@ -73,9 +58,10 @@ function(make_gnucash_potfiles)
   file (GLOB_RECURSE FILES_IN RELATIVE ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/*.c ${CMAKE_SOURCE_DIR}/*.cpp
     ${CMAKE_SOURCE_DIR}/*.glade ${CMAKE_SOURCE_DIR}/*.desktop.in.in
-    ${CMAKE_SOURCE_DIR}/*.gschema.xml.in ${CMAKE_SOURCE_DIR}/*.appdata.xml.in
+    ${CMAKE_SOURCE_DIR}/*.gschema.xml.in ${CMAKE_SOURCE_DIR}/*.appdata.xml.in.in
     ${CMAKE_SOURCE_DIR}/*.keys.in ${CMAKE_SOURCE_DIR}/*.scm
-    ${CMAKE_SOURCE_DIR}/*/qofbookslots.h
+    ${CMAKE_SOURCE_DIR}/*.py ${CMAKE_SOURCE_DIR}/*/qofbookslots.h
+    ${CMAKE_SOURCE_DIR}/*/gnc-commodity.h
   )
 
   # Only consider files in a selection of the source directories and
@@ -84,13 +70,13 @@ function(make_gnucash_potfiles)
   foreach (path ${FILES_IN})
     if (${path} MATCHES "^(bindings/|borrowed/|common/|doc/|libgnucash/|gnucash/)"
         AND
-        NOT ${path} MATCHES "gw-|test|experimental|python-bindings|swig-.*\\.c"
+        NOT ${path} MATCHES "gw-|mocks|test|experimental|python-bindings|swig-.*\\.c"
         # Skip POSIX style hidden files even if they have the proper extension
         # These are typically temporary files from editors like emacs
         AND
         NOT ${path} MATCHES "/[.][^/]*$")
         list (APPEND GOOD_FILES ${path})
-    endif ()
+    endif()
   endforeach (path)
 
   # Remove the paths that we have marked as explicitly skipped
@@ -131,7 +117,7 @@ function(make_gnucash_potfiles)
   set(gnucash_pot_depends ${POTFILE_DEPS}  CACHE INTERNAL "List of files with translatable strings. If any of these change, gnucash.pot should be regenerated")
 endfunction()
 
-if(BUILDING_FROM_VCS)
+if(BUILD_GNUCASH_POT)
 
   make_gnucash_potfiles()
 
@@ -141,16 +127,16 @@ if(BUILDING_FROM_VCS)
 
   if (${XGETTEXT} STREQUAL "XGETTEXT-NOTFOUND")
     message(FATAL_ERROR "Can't find the 'xgettext' program.")
-  endif ()
+  endif()
 
   add_custom_command(OUTPUT gnucash.pot
         COMMAND ${CMAKE_COMMAND}
            -D TOP_SRC_DIR=${CMAKE_SOURCE_DIR}
            -D PO_SRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}
            -D PO_BIN_DIR=${CMAKE_CURRENT_BINARY_DIR}
-           -D PACKAGE=${PACKAGE}
+           -D PROJECT_NAME=${PROJECT_NAME}
            -D PACKAGE_NAME=${PACKAGE_NAME}
-           -D PACKAGE_VERSION=${PACKAGE_VERSION}
+           -D PROJECT_VERSION=${PROJECT_VERSION}
            -D XGETTEXT=${XGETTEXT}
            -P ${CMAKE_CURRENT_SOURCE_DIR}/gnucash-pot.cmake
         DEPENDS ${gnucash_pot_depends}

@@ -124,11 +124,11 @@ void create_regex (GString *regex_str, const gchar *sep)
             "(?<description>\"(?:[^\"]|\"\")*\"|[^%s]*)%s"
             "(?<color>\"(?:[^\"]|\"\")*\"|[^%s]*)%s"
             "(?<notes>\"(?:[^\"]|\"\")*\"|[^%s]*)%s"
-            "(?<commoditym>\"(?:[^\"]|\"\")*\"|[^%s]*)%s"
-            "(?<commodityn>\"(?:[^\"]|\"\")*\"|[^%s]*)%s"
+            "(?<symbol>\"(?:[^\"]|\"\")*\"|[^%s]*)%s"
+            "(?<namespace>\"(?:[^\"]|\"\")*\"|[^%s]*)%s"
             "(?<hidden>[^%s]*)%s"
             "(?<tax>[^%s]*)%s"
-            "(?<place_holder>[^%s[:cntrl:]]*)(?:\\R*)",
+            "(?<placeholder>[^%s[:cntrl:]]*)(?:\\R*)",
             sep, sep, sep, sep, sep, sep, sep, sep, sep, sep, sep, sep,
             sep, sep, sep, sep, sep, sep, sep, sep, sep, sep, sep);
 
@@ -273,7 +273,7 @@ static void csv_import_assistant_enable_account_forward (CsvImportInfo *info)
 /*******************************************************
  * csv_import_sep_cb
  *
- * call back for type of separartor required
+ * call back for type of separator required
  *******************************************************/
 void csv_import_sep_cb (GtkWidget *radio, gpointer user_data)
 {
@@ -641,8 +641,9 @@ csv_import_assistant_create (CsvImportInfo *info)
     gnc_builder_add_from_file  (builder, "assistant-csv-account-import.glade", "csv_account_import_assistant");
     info->assistant = GTK_WIDGET(gtk_builder_get_object (builder, "csv_account_import_assistant"));
 
-    // Set the style context for this dialog so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(info->assistant), "GncAssistAccountImport");
+    // Set the name for this assistant so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(info->assistant), "gnc-id-assistant-csv-account-import");
+    gnc_widget_style_context_add_class (GTK_WIDGET(info->assistant), "gnc-class-imports");
 
     /* Load default settings */
     load_settings (info);
@@ -699,18 +700,18 @@ csv_import_assistant_create (CsvImportInfo *info)
   gtk_tree_view_column_set_resizable (column, TRUE); \
   gtk_tree_view_append_column (GTK_TREE_VIEW(info->tree_view), column); \
   g_free (mnemonic_desc);
-    CREATE_COLUMN ("type", TYPE);
-    CREATE_COLUMN ("full_name", FULL_NAME);
-    CREATE_COLUMN ("name", NAME);
-    CREATE_COLUMN ("code", CODE);
-    CREATE_COLUMN ("description", DESCRIPTION);
-    CREATE_COLUMN ("color", COLOR);
-    CREATE_COLUMN ("notes", NOTES);
-    CREATE_COLUMN ("commoditym", COMMODITYM);
-    CREATE_COLUMN ("commodityn", COMMODITYN);
-    CREATE_COLUMN ("hidden", HIDDEN);
-    CREATE_COLUMN ("tax", TAX);
-    CREATE_COLUMN ("place_holder", PLACE_HOLDER);
+    CREATE_COLUMN ("Type", TYPE);
+    CREATE_COLUMN ("Account Full Name", FULL_NAME);
+    CREATE_COLUMN ("Account Name", NAME);
+    CREATE_COLUMN ("Account Code", CODE);
+    CREATE_COLUMN ("Description", DESCRIPTION);
+    CREATE_COLUMN ("Account Color", COLOR);
+    CREATE_COLUMN ("Notes", NOTES);
+    CREATE_COLUMN ("Symbol", SYMBOL);
+    CREATE_COLUMN ("Namespace", NAMESPACE);
+    CREATE_COLUMN ("Hidden", HIDDEN);
+    CREATE_COLUMN ("Tax Info", TAX);
+    CREATE_COLUMN ("Placeholder", PLACE_HOLDER);
 
     /* Finish Page */
     info->finish_label = GTK_WIDGET(gtk_builder_get_object (builder, "end_page"));

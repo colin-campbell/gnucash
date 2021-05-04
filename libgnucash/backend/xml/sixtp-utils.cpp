@@ -36,12 +36,10 @@ extern "C"
 #include <time.h>
 #include <errno.h>
 
-#ifdef GNUCASH_MAJOR_VERSION
 #ifndef HAVE_STRPTIME
 #include "strptime.h"
 #endif
 #include <gnc-date.h>
-#endif
 }
 
 #include "sixtp.h"
@@ -129,7 +127,7 @@ concatenate_child_result_chars (GSList* data_from_children)
         else
         {
             char* temp;
-            temp = g_strconcat (name, (gchar*) cr->data, NULL);
+            temp = g_strconcat (name, (gchar*) cr->data, nullptr);
             g_free (name);
             name = temp;
         }

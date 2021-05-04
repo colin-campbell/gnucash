@@ -163,15 +163,15 @@ gnc_plugin_page_register_get_account (GncPluginPageRegister *page);
 Transaction *
 gnc_plugin_page_register_get_current_txn (GncPluginPageRegister *page);
 
-/** Given a pointer to a register plugin page, set the focus to
- *  the sheet. This is used in a g_idle_add so return FALSE.
+/** This function clears the registers current filter.
+ *  It is used so jumps to splits from other places can be completed 
+ *  otherwise the jump will be to the last active cell.
  *
- *  @param page The "register" page.
- *
- *  @return FALSE
+ *  @param plugin_page A pointer to the GncPluginPageRegister.
  */
-gboolean
-gnc_plugin_page_register_focus (GncPluginPageRegister *page);
+void
+gnc_plugin_page_register_clear_current_filter (GncPluginPage* plugin_page);
+
 
 G_END_DECLS
 /** @} */

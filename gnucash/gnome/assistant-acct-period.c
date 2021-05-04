@@ -1,5 +1,5 @@
 /********************************************************************\
- * assistant-acct-period.c - accouting period assistant for GnuCash *
+ * assistant-acct-period.c - accounting period assistant for GnuCash*
  * Copyright (C) 2001 Gnumatic, Inc.                                *
  * Copyright (C) 2001 Dave Peticolas <dave@krondo.com>              *
  * Copyright (C) 2003 Linas Vepstas <linas@linas.org>               *
@@ -308,8 +308,8 @@ ap_assistant_menu_prepare (GtkAssistant *assistant, gpointer user_data)
     /* Display the results */
     str = g_strdup_printf (
               /* Translators: %s is a date string. %d is the number of books
-               * that will be created. This is a ngettext(3) message (but
-               * only for the %d part). */
+                 that will be created. This is a ngettext(3) message (but
+                 only for the %d part). */
               ngettext("The earliest transaction date found in this book is %s. "
                        "Based on the selection made above, this book will be split "
                        "into %d book.",
@@ -365,11 +365,11 @@ ap_assistant_book_prepare (GtkAssistant *assistant, gpointer user_data)
     /* Display the book info */
 
     period_text =
-	/* Translators: Run the assistent in your language to see GTK's translation of the button labels. */
+	/* Translators: Run the assistant in your language to see GTK's translation of the button labels. */
         _("You have asked for a book to be created. This book "
           "will contain all transactions up to midnight %s "
-          "(for a total of %d transactions spread over %d accounts).\n\n "
-          "Amend the Title and Notes or Click on \"Next\" to proceed.\n "
+          "(for a total of %d transactions spread over %d accounts).\n\n"
+          "Amend the Title and Notes or Click on \"Next\" to proceed.\n"
           "Click on \"Back\" to adjust the dates or \"Cancel\".");
     str = g_strdup_printf (period_text, close_date_str, ntrans, nacc);
     gtk_label_set_text (GTK_LABEL(info->book_details), str);
@@ -542,8 +542,8 @@ ap_assistant_create (AcctPeriodInfo *info)
     window = GTK_WIDGET(gtk_builder_get_object (builder, "account_period_assistant"));
     info->window = window;
 
-    // Set the style context for this assistant so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(window), "GncAssistAccountPeriod");
+    // Set the name for this assistant so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(window), "gnc-id-assistant-account-period");
 
     /* Enable all pages except menu page. */
     gtk_assistant_set_page_complete (GTK_ASSISTANT (window),
@@ -586,8 +586,8 @@ ap_assistant_create (AcctPeriodInfo *info)
                             gnc_frequency_new_from_recurrence(info->period, &info->closing_date));
 
     /* Change the text so that its more mainingful for this assistant */
-    gnc_frequency_set_frequency_label_text(info->period_menu, _("Period:"));
-    gnc_frequency_set_date_label_text(info->period_menu, _("Closing Date:"));
+    gnc_frequency_set_frequency_label_text(info->period_menu, _("Period"));
+    gnc_frequency_set_date_label_text(info->period_menu, _("Closing Date"));
 
     /* Reparent to the correct location */
 

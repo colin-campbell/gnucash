@@ -17,17 +17,17 @@
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  *                                                                  *
 \********************************************************************/
+#include <glib.h>
+#include <glib/gstdio.h>
+
 extern "C"
 {
 #include <config.h>
-#include <glib.h>
-#include <glib/gstdio.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
 #include <errno.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "test-engine-stuff.h"
@@ -35,6 +35,8 @@ extern "C"
 #include "gnc-engine.h"
 #include "TransLog.h"
 }
+
+#include <cstdlib>
 
 #include "test-file-stuff.h"
 #include "io-gncxml-v2.h"
@@ -97,11 +99,10 @@ test_file (const char* filename)
         QofSession* session;
         char* cmd;
         char* new_file = gen_new_file_name (filename, possible_envs[i]);
-        QofSession* new_session;
 
-        session = qof_session_new ();
+        auto session = qof_session_new (nullptr);
 
-        qof_session_begin (session, filename, TRUE, FALSE, FALSE);
+        qof_session_begin (session, filename, SESSION_READ_ONLY);
         err = qof_session_pop_error (session);
         if (err)
         {
@@ -120,9 +121,9 @@ test_file (const char* filename)
         if (!g_setenv ("LANG", possible_envs[i], TRUE))
             return g_strdup ("setenv for LANG");
 
-        new_session = qof_session_new ();
+        auto new_session = qof_session_new (nullptr);
 
-        qof_session_begin (new_session, new_file, FALSE, FALSE, FALSE);
+        qof_session_begin (new_session, new_file, SESSION_NORMAL_OPEN);
         err = qof_session_pop_error (new_session);
         if (err)
         {

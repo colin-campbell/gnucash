@@ -14,6 +14,8 @@
  * 51 Franklin Street, Fifth Floor    Fax:    +1-617-542-2652       *
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
 \********************************************************************/
+#include <glib.h>
+#include <glib/gstdio.h>
 
 extern "C"
 {
@@ -27,8 +29,6 @@ extern "C"
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <glib.h>
-#include <glib/gstdio.h>
 #include <regex.h>
 
 #include <gnc-engine.h> //for GNC_MOD_BACKEND
@@ -48,6 +48,11 @@ extern "C"
 #define XML_URI_PREFIX "xml://"
 #define FILE_URI_PREFIX "file://"
 static QofLogModule log_module = GNC_MOD_BACKEND;
+
+GncXmlBackend::~GncXmlBackend()
+{
+    session_end();
+};
 
 bool
 GncXmlBackend::check_path (const char* fullpath, bool create)
@@ -106,11 +111,11 @@ GncXmlBackend::check_path (const char* fullpath, bool create)
 }
 
 void
-GncXmlBackend::session_begin(QofSession* session, const char* book_id,
-                       bool ignore_lock, bool create, bool force)
+GncXmlBackend::session_begin(QofSession* session, const char* new_uri,
+                      SessionOpenMode mode)
 {
     /* Make sure the directory is there */
-    m_fullpath = gnc_uri_get_path (book_id);
+    m_fullpath = gnc_uri_get_path (new_uri);
 
     if (m_fullpath.empty())
     {
@@ -118,14 +123,15 @@ GncXmlBackend::session_begin(QofSession* session, const char* book_id,
         set_message("No path specified");
         return;
     }
-    if (create && !force && save_may_clobber_data())
+    if (mode == SESSION_NEW_STORE && save_may_clobber_data())
     {
         set_error(ERR_BACKEND_STORE_EXISTS);
         PWARN ("Might clobber, no force");
         return;
     }
 
-    if (!check_path(m_fullpath.c_str(), create))
+    if (!check_path(m_fullpath.c_str(),
+                    mode == SESSION_NEW_STORE || mode == SESSION_NEW_OVERWRITE))
         return;
     m_dirname = g_path_get_dirname (m_fullpath.c_str());
 
@@ -137,34 +143,19 @@ GncXmlBackend::session_begin(QofSession* session, const char* book_id,
     xaccLogSetBaseName (m_fullpath.c_str());
     PINFO ("logpath=%s", m_fullpath.empty() ? "(null)" : m_fullpath.c_str());
 
-    /* And let's see if we can get a lock on it. */
+    if (mode == SESSION_READ_ONLY)
+        return; // Read-only, don't care about locks.
+
+    /* Set the lock file */
     m_lockfile = m_fullpath + ".LCK";
-
-    if (!ignore_lock && !get_file_lock())
+    auto locked = get_file_lock();
+    if (mode == SESSION_BREAK_LOCK && !locked)
     {
-        // We should not ignore the lock, but couldn't get it. The
-        // be_get_file_lock() already set the appropriate backend_error in this
-        // case, so we just return here.
-        m_lockfile.clear();
-
-        if (force)
-        {
-            QofBackendError berror = get_error();
-            if (berror == ERR_BACKEND_LOCKED || berror == ERR_BACKEND_READONLY)
-            {
-                // Even though we couldn't get the lock, we were told to force
-                // the opening. This is ok because the FORCE argument is
-                // changed only if the caller wants a read-only book.
-            }
-            else
-            {
-                // Unknown error. Push it again on the error stack.
-                set_error(berror);
-                return;
-            }
-        }
+        // Don't pass on locked or readonly errors.
+        QofBackendError berror = get_error();
+        if (!(berror == ERR_BACKEND_LOCKED || berror == ERR_BACKEND_READONLY))
+            set_error(berror);
     }
-    m_book = nullptr;
 }
 
 void
@@ -326,6 +317,13 @@ GncXmlBackend::sync(QofBook* book)
 
     write_to_file (true);
     remove_old_files();
+}
+
+void
+GncXmlBackend::commit(QofInstance* instance)
+{
+    if (qof_instance_is_dirty(instance))
+        qof_instance_mark_clean(instance);
 }
 
 bool
@@ -652,14 +650,15 @@ GncXmlBackend::get_file_lock ()
         case EACCES:
         case EROFS:
         case ENOSPC:
-            PWARN ("Unable to create the lockfile %s; may not have write priv",
-                   m_lockfile.c_str());
             be_err = ERR_BACKEND_READONLY;
             break;
         default:
             be_err = ERR_BACKEND_LOCKED;
             break;
         }
+        if (errno != EEXIST) // Can't lock, but not because the file is locked
+            PWARN ("Unable to create the lockfile %s: %s",
+                   m_lockfile.c_str(), strerror(errno));
         set_error(be_err);
         return false;
     }

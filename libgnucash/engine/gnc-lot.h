@@ -64,6 +64,7 @@
 #include "qof.h"
 #include "gnc-engine.h"
 /*#include "gnc-lot-p.h"*/
+#include "gncInvoice.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -127,6 +128,12 @@ gint gnc_lot_count_splits (const GNCLot *);
 Account * gnc_lot_get_account (const GNCLot *);
 void gnc_lot_set_account(GNCLot*, Account*);
 
+/** The gnc_lot_get_cached_invoice() routine returns the invoice with
+ *    which this lot is associated. */
+/*@ dependent @*/
+GncInvoice * gnc_lot_get_cached_invoice (const GNCLot *lot);
+void gnc_lot_set_cached_invoice(GNCLot* lot, GncInvoice *invoice);
+
 /** The gnc_lot_get_balance() routine returns the balance of the lot.
  *    The commodity in which this balance is expressed is the commodity
  *    of the account. */
@@ -147,9 +154,10 @@ void gnc_lot_get_balance_before (const GNCLot *, const Split *,
 gboolean gnc_lot_is_closed (GNCLot *);
 
 /** The gnc_lot_get_earliest_split() routine is a convenience routine
- *    that helps identify the date this lot was opened.   It simply
+ *    that helps identify the earliest date in the lot.   It simply
  *    loops over all of the splits in the lot, and returns the split
- *    with the earliest split->transaction->date_posted.
+ *    with the earliest split->transaction->date_posted.  It may not
+ *    necessarily identify the lot opening split.
  */
 Split * gnc_lot_get_earliest_split (GNCLot *lot);
 

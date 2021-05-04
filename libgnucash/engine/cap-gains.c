@@ -48,7 +48,7 @@
  * lots may have been user-hand-built. These should be left alone.
  *
 ToDo:
- o XXX Need to create a data-integrity scrubber, tht makes sure that
+ o XXX Need to create a data-integrity scrubber, that makes sure that
    the various flags, and pointers & etc. match. See sections marked
    with XXX below for things that might go wrong.
  */
@@ -231,7 +231,7 @@ xaccSplitAssignToLot (Split *split, GNCLot *lot)
     /* If this split already belongs to a lot, we are done. */
     if (split->lot) return NULL;
 
-    /* Anomolous situation; except for voided transactions,
+    /* Anomalous situation; except for voided transactions,
      * we don't expect to see splits with no amount ..
      * unless they're gains splits, and we shouldn't see those.
      */
@@ -336,7 +336,7 @@ xaccSplitAssignToLot (Split *split, GNCLot *lot)
         amt_tot = split->amount;
         amt_a = gnc_numeric_neg (baln);
         amt_b = gnc_numeric_sub_fixed (amt_tot, amt_a);
-        g_assert (gnc_numeric_check(amt_b) == GNC_ERROR_OK);
+        g_return_val_if_fail(gnc_numeric_check(amt_b) == GNC_ERROR_OK, NULL);
 
         PINFO ("++++++++++++++ splitting split=%p into amt = %s + %s",
                split,
@@ -366,7 +366,7 @@ xaccSplitAssignToLot (Split *split, GNCLot *lot)
                  gnc_num_dbg_to_string(amt_tot));
         }
 
-        if (gnc_numeric_zero_p(val_a) || gnc_numeric_zero_p(val_b))
+        if (gnc_numeric_zero_p(amt_a) || gnc_numeric_zero_p(amt_b))
         {
             PERR ("Failed to split into two!");
         }
@@ -376,8 +376,8 @@ xaccSplitAssignToLot (Split *split, GNCLot *lot)
                gnc_num_dbg_to_string(val_a),
                gnc_num_dbg_to_string(val_b) );
 
-        g_assert (!gnc_numeric_zero_p (amt_a));
-        g_assert (!gnc_numeric_zero_p (val_a));
+        g_return_val_if_fail (!gnc_numeric_zero_p (amt_a), NULL);
+        g_return_val_if_fail (!gnc_numeric_check (val_a), NULL);
         xaccSplitSetAmount (split, amt_a);
         xaccSplitSetValue (split, val_a);
 
@@ -438,8 +438,8 @@ xaccSplitAssign (Split *split)
      * have lots, we are done.
      */
     if (split->lot) return FALSE;
-    g_assert (split->gains == GAINS_STATUS_UNKNOWN ||
-	      (split->gains & GAINS_STATUS_GAINS) == FALSE);
+    g_return_val_if_fail (split->gains == GAINS_STATUS_UNKNOWN ||
+                          (split->gains & GAINS_STATUS_GAINS) == FALSE, FALSE);
     acc = split->acc;
     if (!xaccAccountHasTrades (acc))
         return FALSE;
@@ -836,7 +836,7 @@ xaccSplitComputeCapGains(Split *split, Account *gain_acc)
             {
                 new_gain_split = FALSE;
             }
-            /* If the gain is already recorded corectly do nothing.  This is
+            /* If the gain is already recorded correctly do nothing.  This is
              * more than just an optimization since this may be called during
              * gnc_book_partition_txn and depending on the order in which things
              * happen some splits may be in the wrong book at that time. */

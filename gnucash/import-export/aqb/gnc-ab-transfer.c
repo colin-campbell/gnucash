@@ -142,6 +142,7 @@ gnc_ab_maketrans(GtkWidget *parent, Account *gnc_acc,
         GNC_AB_JOB_STATUS job_status;
         GncABImExContextImport *ieci = NULL;
 
+#ifndef AQBANKING6
         /* Get a GUI object */
         gui = gnc_GWEN_Gui_get(parent);
         if (!gui)
@@ -150,6 +151,7 @@ gnc_ab_maketrans(GtkWidget *parent, Account *gnc_acc,
             aborted = TRUE;
             goto repeat;
         }
+#endif
 
         /* Let the user enter the values */
         result = gnc_ab_trans_dialog_run_until_ok(td);
@@ -180,7 +182,7 @@ gnc_ab_maketrans(GtkWidget *parent, Account *gnc_acc,
             if (!gnc_verify_dialog (
                         GTK_WINDOW (parent), FALSE, "%s",
                         _("The backend found an error during the preparation "
-                          "of the job. It is not possible to execute this job. \n"
+                          "of the job. It is not possible to execute this job.\n"
                           "\n"
                           "Most probable the bank does not support your chosen "
                           "job or your Online Banking account does not have the permission "

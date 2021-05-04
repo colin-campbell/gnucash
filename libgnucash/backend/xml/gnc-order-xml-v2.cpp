@@ -21,11 +21,11 @@
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  *                                                                  *
 \********************************************************************/
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
-
-#include <glib.h>
 #include <stdlib.h>
 #include <string.h>
 #include "gncOrderP.h"
@@ -161,7 +161,7 @@ order_guid_handler (xmlNodePtr node, gpointer order_pdata)
         gncOrderSetGUID (pdata->order, guid);
     }
 
-    g_free (guid);
+    guid_free (guid);
 
     return TRUE;
 }

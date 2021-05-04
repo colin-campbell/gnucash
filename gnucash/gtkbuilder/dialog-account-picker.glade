@@ -1,25 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.22.1 -->
+<!-- Generated with glade 3.36.0 -->
 <interface>
-  <requires lib="gtk+" version="3.10"/>
+  <requires lib="gtk+" version="3.22"/>
   <object class="GtkWindow" id="preferences_window">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
     <property name="title" translatable="yes">Preferences</property>
     <child>
-      <placeholder/>
-    </child>
-    <child>
       <object class="GtkGrid" id="prefs_table">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
+        <property name="border_width">6</property>
+        <property name="row_spacing">3</property>
+        <property name="column_spacing">6</property>
         <child>
           <object class="GtkLabel" id="label847718">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="halign">start</property>
-            <property name="label" translatable="yes">&lt;b&gt;QIF Import&lt;/b&gt;</property>
-            <property name="use_markup">True</property>
+            <property name="label" translatable="yes">QIF Import</property>
+            <attributes>
+              <attribute name="weight" value="bold"/>
+            </attributes>
           </object>
           <packing>
             <property name="left_attach">0</property>
@@ -36,7 +38,6 @@
             <property name="tooltip_markup">Show some documentation-only pages in QIF Import assistant.</property>
             <property name="tooltip_text" translatable="yes">Show some documentation-only pages in QIF Import assistant.</property>
             <property name="halign">start</property>
-            <property name="margin_left">12</property>
             <property name="resize_mode">immediate</property>
             <property name="use_underline">True</property>
             <property name="draw_indicator">True</property>
@@ -56,7 +57,6 @@
             <property name="tooltip_markup">When the status is not specified in a QIF file, the transactions are marked as reconciled.</property>
             <property name="tooltip_text" translatable="yes">When the status is not specified in a QIF file, the transactions are marked as reconciled.</property>
             <property name="halign">start</property>
-            <property name="margin_left">12</property>
             <property name="use_underline">True</property>
             <property name="active">True</property>
             <property name="draw_indicator">True</property>
@@ -76,7 +76,6 @@
             <property name="tooltip_markup">When the status is not specified in a QIF file, the transactions are marked as cleared.</property>
             <property name="tooltip_text" translatable="yes">When the status is not specified in a QIF file, the transactions are marked as cleared.</property>
             <property name="halign">start</property>
-            <property name="margin_left">12</property>
             <property name="use_underline">True</property>
             <property name="draw_indicator">True</property>
             <property name="group">pref/dialogs.import.qif/default-status-reconciled</property>
@@ -96,7 +95,6 @@
             <property name="tooltip_markup">When the status is not specified in a QIF file, the transactions are marked as not cleared.</property>
             <property name="tooltip_text" translatable="yes">When the status is not specified in a QIF file, the transactions are marked as not cleared.</property>
             <property name="halign">start</property>
-            <property name="margin_left">12</property>
             <property name="use_underline">True</property>
             <property name="draw_indicator">True</property>
             <property name="group">pref/dialogs.import.qif/default-status-reconciled</property>
@@ -107,11 +105,10 @@
           </packing>
         </child>
         <child>
-          <object class="GtkLabel" id="qif_default_transation_status">
+          <object class="GtkLabel" id="qif_default_transaction_status">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="halign">start</property>
-            <property name="margin_left">12</property>
             <property name="label" translatable="yes">Default transaction status (overridden by the status given by the QIF file)</property>
           </object>
           <packing>
@@ -137,6 +134,9 @@
         </child>
       </object>
     </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
   </object>
   <object class="GtkDialog" id="qif_import_account_picker_dialog">
     <property name="can_focus">False</property>
@@ -144,9 +144,6 @@
     <property name="default_width">300</property>
     <property name="default_height">400</property>
     <property name="type_hint">dialog</property>
-    <child>
-      <placeholder/>
-    </child>
     <child internal-child="vbox">
       <object class="GtkBox" id="dialog-vbox1">
         <property name="visible">True</property>
@@ -257,15 +254,15 @@
             <child>
               <object class="GtkBox" id="placeholder_warning_hbox">
                 <property name="can_focus">False</property>
-                <property name="margin_left">6</property>
-                <property name="margin_right">6</property>
+                <property name="margin_start">6</property>
+                <property name="margin_end">6</property>
                 <property name="margin_top">6</property>
                 <property name="spacing">6</property>
                 <child>
                   <object class="GtkImage" id="placeholder_warning_image">
                     <property name="can_focus">False</property>
                     <property name="halign">start</property>
-                    <property name="stock">gtk-dialog-warning</property>
+                    <property name="icon_name">dialog-warning</property>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -306,5 +303,8 @@
       <action-widget response="-6">cancelbutton</action-widget>
       <action-widget response="-5">okbutton</action-widget>
     </action-widgets>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
   </object>
 </interface>

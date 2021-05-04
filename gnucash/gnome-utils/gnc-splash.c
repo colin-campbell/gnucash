@@ -24,6 +24,7 @@
 
 #include <gtk/gtk.h>
 #include <glib/gi18n.h>
+#include <math.h>
 
 #include "gnc-gnome-utils.h"
 #include "gnc-splash.h"
@@ -69,8 +70,8 @@ gnc_show_splash_screen (void)
     gtk_window_set_decorated(GTK_WINDOW (splash), FALSE);
     gtk_window_set_skip_taskbar_hint (GTK_WINDOW (splash), TRUE);
 
-    // Set the style context for this dialog so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(splash), "GncSplash");
+    // Set the name for this dialog so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(splash), "gnc-id-splash");
 
     g_signal_connect (splash, "destroy",
                       G_CALLBACK (splash_destroy_cb), NULL);
@@ -168,13 +169,19 @@ gnc_update_splash_screen (const gchar *string, double percentage)
         }
     }
 
-    if (progress_bar)
+    if (progress_bar )
     {
-        if (percentage < 0)
+         double curr_fraction =
+              round(gtk_progress_bar_get_fraction(GTK_PROGRESS_BAR(progress_bar)) * 100.0);
+         if (percentage >= 0 && percentage <= 100.0 &&
+             round(percentage) == curr_fraction)
+              return; // No change so don't wast time running the main loop
+
+        if (percentage <= 0)
         {
             gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progress_bar), 0.0);
         }
-        else
+        else 
         {
             if (percentage <= 100)
             {

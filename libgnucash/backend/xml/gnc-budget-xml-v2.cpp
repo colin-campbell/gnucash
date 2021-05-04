@@ -20,12 +20,11 @@
  * 51 Franklin Street, Fifth Floor    Fax:    +1-617-542-2652
  * Boston, MA  02110-1301,  USA       gnu@gnu.org
  */
+#include <glib.h>
 
 extern "C"
 {
 #include <config.h>
-
-#include <glib.h>
 #include <stdlib.h>
 #include <string.h>
 }
@@ -109,7 +108,7 @@ budget_id_handler (xmlNodePtr node, gpointer bgt)
     guid = dom_tree_to_guid (node);
     g_return_val_if_fail (guid, FALSE);
     qof_instance_set_guid (QOF_INSTANCE (bgt), guid);
-    g_free (guid);
+    guid_free (guid);
     return TRUE;
 }
 

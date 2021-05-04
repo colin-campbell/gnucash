@@ -1,4 +1,4 @@
-<schemalist gettext-domain="@GETTEXT_PACKAGE@">
+<schemalist gettext-domain="@PROJECT_NAME@">
   <schema id="org.gnucash" path="/org/gnucash/">
     <child name="general" schema="org.gnucash.general"/>
     <child name="dev" schema="org.gnucash.dev"/>
@@ -22,8 +22,8 @@
     </key>
     <key name="assoc-head" type="s">
       <default>''</default>
-      <summary>Transaction Associations head path</summary>
-      <description>This is the path head for the Transaction file Associations</description>
+      <summary>Transaction Linked Files head path</summary>
+      <description>This is the path head for the Transaction Linked Files with relative paths</description>
     </key>
     <key name="file-compression" type="b">
       <default>true</default>
@@ -69,11 +69,6 @@
       <default>false</default>
       <summary>Force prices to display as decimals even if they must be rounded.</summary>
       <description>If active, GnuCash will round prices as necessary to display them as decimals instead of displaying the exact fraction if the fractional part cannot be exactly represented as a decimal.</description>
-    </key>
-    <key name="migrate-prefs-done" type="b">
-      <default>false</default>
-      <summary>Tool to migrate preferences from old backend (GConf) to new one (GSettings) has run successfully.</summary>
-      <description>GnuCash switched to another backend to store user preferences between 2.4 and 2.6. To smooth the transition, most preferences will be migrated the first time a 2.6 version of GnuCash is run. This migration should only run once. This preference keeps track whether or not this migration tool has run successfully.</description>
     </key>
     <key name="retain-type-never" type="b">
       <default>false</default>
@@ -171,7 +166,7 @@
       <description>When a date is entered without year it can be completed so that it will be within the current calendar year or close to the current date based on a sliding window starting a set number of months backwards in time.</description>
     </key>
     <key name="date-backmonths" type="d">
-      <default>11.0</default>
+      <default>6.0</default>
       <summary>Maximum number of months to go back.</summary>
       <description>Dates will be completed so that they are close to the current date. Enter the maximum number of months to go backwards in time when completing dates.</description>
     </key>
@@ -287,12 +282,12 @@
     </key>
     <key name="default-style-ledger" type="b">
       <default>true</default>
-      <summary>Show all transactions on one line. (Two in double line mode.)</summary>
+      <summary>Show all transactions on one line or in double line mode on two.</summary>
       <description>This field specifies the default view style when opening a new register window. Possible values are "ledger", "auto-ledger" and "journal". The "ledger" setting says to show each transaction on one or two lines. The "auto-ledger" setting does the same, but also expands only the current transaction to show all splits. The "journal" setting shows all transactions in expanded form.</description>
     </key>
     <key name="default-style-autoledger" type="b">
       <default>false</default>
-      <summary>Automatically expand the current transaction to show all splits. All other transactions are shown on one line. (Two in double line mode.)</summary>
+      <summary>Automatically expand the current transaction to show all splits. All other transactions are shown on one line or in double line mode on two.</summary>
       <description>This field specifies the default view style when opening a new register window. Possible values are "ledger", "auto-ledger" and "journal". The "ledger" setting says to show each transaction on one or two lines. The "auto-ledger" setting does the same, but also expands only the current transaction to show all splits. The "journal" setting shows all transactions in expanded form.</description>
     </key>
     <key name="default-style-journal" type="b">
@@ -302,8 +297,8 @@
     </key>
     <key name="double-line-mode" type="b">
       <default>false</default>
-      <summary>Show two lines of information for each transaction</summary>
-      <description>Show two lines of information for each transaction in a register. This is the default setting for when a register is first opened. The setting can be changed at any time via the "View-&gt;Double Line" menu item.</description>
+      <summary>Show a second line with "Action", "Notes", and "Linked Documents" for each transaction.</summary>
+      <description>Show a second line with "Action", "Notes", and "Linked Documents" for each transaction in a register. This is the default setting for when a register is first opened. The setting can be changed at any time via the "View-&gt;Double Line" menu item.</description>
     </key>
     <key name="show-leaf-account-names" type="b">
       <default>false</default>
@@ -376,7 +371,7 @@ For example setting this to 2.0 will display reports at twice their typical size
     <key name="filename-format" type="s">
       <default>'%1$s-%2$s-%3$s'</default>
       <summary>PDF export file name format</summary>
-      <description>This setting chooses the file name for PDF export. This is a sprintf(3) string with three arguments: "%1$s" is the report name such as "Invoice". "%2$s" is the number of the report, which for an invoice report is the invoice number. "%3$s" is the date of the report, formatted according to the filename-date-format setting. (Note: Any characters that are not allowed in filenames, such as '/', will be replaced with underscores '_' in the resulting file name.)</description>
+      <description>This setting chooses the file name for PDF export. This is a sprintf(3) string with three arguments: "%1$s" is the report name such as "Invoice". "%2$s" is the number of the report, which for an invoice report is the invoice number. "%3$s" is the date of the report, formatted according to the filename-date-format setting. Note: Any characters that are not allowed in filenames, such as '/', will be replaced with underscores '_' in the resulting file name.</description>
     </key>
     <key name="filename-date-format" type="s">
       <default>'locale'</default>

@@ -22,11 +22,12 @@
  *                                                                  *
  *******************************************************************/
 
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
 
-#include <glib.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -120,7 +121,7 @@ using boost::smatch;
 using boost::regex_search;
 GncNumeric::GncNumeric(const std::string& str, bool autoround)
 {
-    static const std::string numer_frag("(-?[0-9]+)");
+    static const std::string numer_frag("(-?[0-9]*)");
     static const std::string denom_frag("([0-9]+)");
     static const std::string hex_frag("(0x[a-f0-9]+)");
     static const std::string slash( "[ \\t]*/[ \\t]*");
@@ -175,10 +176,13 @@ GncNumeric::GncNumeric(const std::string& str, bool autoround)
     }
     if (regex_search(str, m, decimal))
     {
-        GncInt128 high(stoll(m[1].str()));
+        auto neg = (m[1].length() && m[1].str()[0] == '-');
+        GncInt128 high((neg && m[1].length() > 1) || (!neg && m[1].length()) ?
+                       stoll(m[1].str()) : 0);
         GncInt128 low(stoll(m[2].str()));
         int64_t d = powten(m[2].str().length());
-        GncInt128 n = high * d + (high >= 0 ? low : -low);
+        GncInt128 n = high * d + (neg ? -low : low);
+
         if (!autoround && n.isBig())
         {
             std::ostringstream errmsg;
@@ -365,7 +369,7 @@ GncNumeric::to_decimal(unsigned int max_places) const
         rr_num *= factor;
         rr_den *= factor;
     }
-    while (!rr_num.isZero() && rr_num % 10 == 0)
+    while (!rr_num.isZero() && rr_num > 9 && rr_den > 9 && rr_num % 10 == 0)
     {
         rr_num /= 10;
         rr_den /= 10;
@@ -1001,6 +1005,10 @@ gnc_numeric_convert(gnc_numeric in, int64_t denom, int how)
     {
         return convert(GncNumeric(in), denom, how);
     }
+    catch (const std::invalid_argument& err)
+    {
+        return gnc_numeric_error(GNC_ERROR_OVERFLOW);
+    }
     catch (const std::overflow_error& err)
     {
         return gnc_numeric_error(GNC_ERROR_OVERFLOW);
@@ -1008,6 +1016,10 @@ gnc_numeric_convert(gnc_numeric in, int64_t denom, int how)
     catch (const std::underflow_error& err)
     {
         return gnc_numeric_error(GNC_ERROR_OVERFLOW);
+    }
+    catch (const std::domain_error& err)
+    {
+        return gnc_numeric_error(GNC_ERROR_REMAINDER);
     }
 }
 
@@ -1070,6 +1082,7 @@ gnc_numeric_to_decimal(gnc_numeric *a, guint8 *max_decimal_places)
 {
     int max_places =  max_decimal_places == NULL ? max_leg_digits :
         *max_decimal_places;
+    if (a->num == 0) return TRUE;
     try
     {
         GncNumeric an (*a);

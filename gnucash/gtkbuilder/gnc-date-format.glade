@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.22.1 -->
+<!-- Generated with glade 3.36.0 -->
 <interface>
-  <requires lib="gtk+" version="3.10"/>
+  <requires lib="gtk+" version="3.22"/>
   <object class="GtkListStore" id="format-liststore">
     <columns>
       <!-- column-name item -->
@@ -39,22 +39,22 @@
     <property name="title" translatable="yes">Date Format</property>
     <property name="resizable">False</property>
     <child>
-      <placeholder/>
-    </child>
-    <child>
       <object class="GtkGrid" id="date_format_table">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
+        <property name="row_spacing">3</property>
+        <property name="column_spacing">6</property>
         <child>
           <object class="GtkLabel" id="sample_label">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="halign">start</property>
+            <property name="margin_top">3</property>
             <property name="label">December 31, 2000</property>
           </object>
           <packing>
             <property name="left_attach">2</property>
-            <property name="top_attach">5</property>
+            <property name="top_attach">4</property>
           </packing>
         </child>
         <child>
@@ -166,7 +166,7 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="halign">start</property>
-            <property name="label" translatable="yes">Months:</property>
+            <property name="label" translatable="yes">Months</property>
           </object>
           <packing>
             <property name="left_attach">1</property>
@@ -178,7 +178,7 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="halign">start</property>
-            <property name="label" translatable="yes">Years:</property>
+            <property name="label" translatable="yes">Years</property>
           </object>
           <packing>
             <property name="left_attach">1</property>
@@ -190,7 +190,7 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="halign">start</property>
-            <property name="label" translatable="yes">Format:</property>
+            <property name="label" translatable="yes">Format</property>
           </object>
           <packing>
             <property name="left_attach">1</property>
@@ -202,26 +202,27 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <property name="halign">start</property>
-            <property name="margin_right">5</property>
-            <property name="label" translatable="yes">Sample:</property>
+            <property name="margin_top">3</property>
+            <property name="label" translatable="yes">Sample</property>
           </object>
           <packing>
             <property name="left_attach">1</property>
-            <property name="top_attach">5</property>
+            <property name="top_attach">4</property>
           </packing>
         </child>
         <child>
           <object class="GtkBox" id="label_box">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="margin_right">5</property>
+            <property name="halign">end</property>
+            <property name="margin_end">6</property>
             <property name="spacing">8</property>
             <child>
               <object class="GtkLabel" id="widget_label">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="halign">start</property>
-                <property name="label" translatable="yes">Date format:</property>
+                <property name="label" translatable="yes">Date format</property>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -263,16 +264,10 @@
         <child>
           <placeholder/>
         </child>
-        <child>
-          <placeholder/>
-        </child>
-        <child>
-          <placeholder/>
-        </child>
-        <child>
-          <placeholder/>
-        </child>
       </object>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
     </child>
   </object>
 </interface>

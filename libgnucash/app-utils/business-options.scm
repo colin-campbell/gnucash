@@ -24,7 +24,74 @@
 ;; invoice pointers may be used to set the value of the option. The
 ;; option always returns a single invoice pointer.
 
+(define-module (gnucash app-utils business-options))
+
+(eval-when (compile load eval expand)
+  (load-extension "libgnc-app-utils" "scm_init_sw_app_utils_module"))
+
+(use-modules (gnucash core-utils))
+(use-modules (gnucash engine))
 (use-modules (gnucash utilities))
+(use-modules (gnucash app-utils options))
+(use-modules (sw_app_utils))
+
+(export gnc:*business-label*)
+(export gnc:*company-name*)
+(export gnc:*company-addy*)
+(export gnc:*company-id*)
+(export gnc:*company-phone*)
+(export gnc:*company-fax*)
+(export gnc:*company-url*)
+(export gnc:*company-email*)
+(export gnc:*company-contact*)
+(export gnc:*fancy-date-label*)
+(export gnc:*fancy-date-format*)
+(export gnc:*tax-label*)
+(export gnc:*tax-nr-label*)
+(export gnc:company-info)
+(export gnc:fancy-date-info)
+(export gnc:*option-section-budgeting*)
+(export gnc:*option-name-auto-readonly-days*)
+(export gnc:*option-name-num-field-source*)
+(export gnc:*kvp-option-path*)
+(export gnc:options-fancy-date)
+(export gnc:*option-name-default-budget*)
+
+(define gnc:*kvp-option-path* (list KVP-OPTION-PATH))
+(define gnc:*option-name-auto-readonly-days* OPTION-NAME-AUTO-READONLY-DAYS)
+(define gnc:*option-name-num-field-source* OPTION-NAME-NUM-FIELD-SOURCE)
+
+(define gnc:*option-section-budgeting* OPTION-SECTION-BUDGETING)
+(define gnc:*option-name-default-budget* OPTION-NAME-DEFAULT-BUDGET)
+
+(define gnc:*business-label* (N_ "Business"))
+(define gnc:*company-name* (N_ "Company Name"))
+(define gnc:*company-addy* (N_ "Company Address"))
+(define gnc:*company-id* (N_ "Company ID"))
+(define gnc:*company-phone* (N_ "Company Phone Number"))
+(define gnc:*company-fax* (N_ "Company Fax Number"))
+(define gnc:*company-url* (N_ "Company Website URL"))
+(define gnc:*company-email* (N_ "Company Email Address"))
+(define gnc:*company-contact* (N_ "Company Contact Person"))
+(define gnc:*fancy-date-label* (N_ "Fancy Date Format"))
+(define gnc:*fancy-date-format* (N_ "custom"))
+(define gnc:*tax-label* (N_ "Tax"))
+(define gnc:*tax-nr-label* (N_ "Tax Number"))
+
+
+(define (gnc:options-fancy-date book)
+  (let ((date-format (gnc:fancy-date-info book gnc:*fancy-date-format*)))
+    (if (boolean? date-format) ;; date-format does not exist
+        (qof-date-format-get-string (qof-date-format-get))
+       date-format)))
+
+(define (gnc:company-info book key)
+  ;; Access company info from key-value pairs for current book
+ (gnc:option-get-value book gnc:*business-label* key))
+
+(define (gnc:fancy-date-info book key)
+  ;; Access fancy date info from key-value pairs for current book
+ (gnc:option-get-value book gnc:*business-label* (list gnc:*fancy-date-label* key)))
 
 (define (gnc:make-invoice-option
 	 section
@@ -86,190 +153,6 @@
 ;; Internally, values are always a guid. Externally, both guids and
 ;; customer pointers may be used to set the value of the option. The
 ;; option always returns a single customer pointer.
-
-(define (gnc:make-customer-option
-	 section
-	 name
-	 sort-tag
-	 documentation-string
-	 default-getter
-	 value-validator)
-
-  (define (convert-to-guid item)
-    (if (string? item)
-        item
-        (gncCustomerReturnGUID item)))
-
-  (define (convert-to-customer item)
-    (if (string? item)
-        (gncCustomerLookupFlip item (gnc-get-current-book))
-        item))
-
-  (let* ((option (convert-to-guid (default-getter)))
-         (option-set #f)
-         (getter (lambda () (convert-to-customer
-			     (if option-set
-				 option
-				 (default-getter)))))
-         (value->string (lambda ()
-                          (string-append
-                           "'" (gnc:value->string (if option-set option #f)))))
-         (validator
-          (if (not value-validator)
-              (lambda (customer) (list #t customer))
-              (lambda (customer)
-                (value-validator (convert-to-customer customer))))))
-    (gnc:make-option
-     section name sort-tag 'customer documentation-string getter
-     (lambda (customer)
-       (if (null? customer) (set! customer (default-getter)))
-       (set! customer (convert-to-customer customer))
-       (let* ((result (validator customer))
-	      (valid (car result))
-	      (value (cadr result)))
-	 (if valid
-	     (begin
-	       (set! option (convert-to-guid value))
-	       (set! option-set #t))
-	     (gnc:error "Illegal customer value set"))))
-     (lambda () (convert-to-customer (default-getter)))
-     (gnc:restore-form-generator value->string)
-     (lambda (b p) (qof-book-set-option b option p))
-     (lambda (b p)
-       (let ((v (qof-book-get-option b p)))
-	 (if (and v (string? v))
-	     (begin
-	       (set! option v)
-	       (set! option-set #t)))))
-     validator
-     #f #f #f #f)))
-
-;; Internally, values are always a guid. Externally, both guids and
-;; vendor pointers may be used to set the value of the option. The
-;; option always returns a single vendor pointer.
-
-(define (gnc:make-vendor-option
-	 section
-	 name
-	 sort-tag
-	 documentation-string
-	 default-getter
-	 value-validator)
-
-  (define (convert-to-guid item)
-    (if (string? item)
-        item
-        (gncVendorReturnGUID item)))
-
-  (define (convert-to-vendor item)
-    (if (string? item)
-        (gncVendorLookupFlip item (gnc-get-current-book))
-        item))
-
-  (let* ((option (convert-to-guid (default-getter)))
-         (option-set #f)
-         (getter (lambda () (convert-to-vendor
-			     (if option-set
-				 option
-				 (default-getter)))))
-         (value->string (lambda ()
-                          (string-append
-                           "'" (gnc:value->string (if option-set option #f)))))
-         (validator
-          (if (not value-validator)
-              (lambda (vendor) (list #t vendor))
-              (lambda (vendor)
-                (value-validator (convert-to-vendor vendor))))))
-    (gnc:make-option
-     section name sort-tag 'vendor documentation-string getter
-     (lambda (vendor)
-       (if (null? vendor) (set! vendor (default-getter)))
-       (set! vendor (convert-to-vendor vendor))
-       (let* ((result (validator vendor))
-	      (valid (car result))
-	      (value (cadr result)))
-	 (if valid
-	     (begin
-	       (set! option (convert-to-guid value))
-	       (set! option-set #t))
-	     (gnc:error "Illegal vendor value set"))))
-     (lambda () (convert-to-vendor (default-getter)))
-     (gnc:restore-form-generator value->string)
-     (lambda (b p) (qof-book-set-option b option p))
-     (lambda (b p)
-       (let ((v (qof-book-get-option b p)))
-	 (if (and v (string? v))
-	     (begin
-	       (set! option v)
-	       (set! option-set #t)))))
-     validator
-     #f #f #f #f)))
-
-;; Internally, values are always a guid. Externally, both guids and
-;; employee pointers may be used to set the value of the option. The
-;; option always returns a single employee pointer.
-
-(define (gnc:make-employee-option
-	 section
-	 name
-	 sort-tag
-	 documentation-string
-	 default-getter
-	 value-validator)
-
-  (define (convert-to-guid item)
-    (if (string? item)
-        item
-        (gncEmployeeReturnGUID item)))
-
-  (define (convert-to-employee item)
-    (if (string? item)
-        (gncEmployeeLookupFlip item (gnc-get-current-book))
-        item))
-
-  (let* ((option (convert-to-guid (default-getter)))
-         (option-set #f)
-         (getter (lambda () (convert-to-employee
-			     (if option-set
-				 option
-				 (default-getter)))))
-         (value->string (lambda ()
-                          (string-append
-                           "'" (gnc:value->string (if option-set option #f)))))
-         (validator
-          (if (not value-validator)
-              (lambda (employee) (list #t employee))
-              (lambda (employee)
-                (value-validator (convert-to-employee employee))))))
-    (gnc:make-option
-     section name sort-tag 'employee documentation-string getter
-     (lambda (employee)
-       (if (null? employee) (set! employee (default-getter)))
-       (set! employee (convert-to-employee employee))
-       (let* ((result (validator employee))
-	      (valid (car result))
-	      (value (cadr result)))
-	 (if valid
-	     (begin
-	       (set! option (convert-to-guid value))
-	       (set! option-set #t))
-	     (gnc:error "Illegal employee value set"))))
-     (lambda () (convert-to-employee (default-getter)))
-     (gnc:restore-form-generator value->string)
-     (lambda (b p) (qof-book-set-option b option p))
-     (lambda (b p)
-       (let ((v (qof-book-get-option b p)))
-	 (if (and v (string? v))
-	     (begin
-	       (set! option v)
-	       (set! option-set #t)))))
-     validator
-     #f #f #f #f)))
-
-;; Internally, values are always a type/guid pair. Externally, both
-;; type/guid pairs and owner pointers may be used to set the value of
-;; the option. The option always returns a single owner pointer.
-
 (define (gnc:make-owner-option
 	 section
 	 name
@@ -344,8 +227,8 @@
        section name sort-tag 'owner documentation-string getter
        (lambda (owner)
 	 (if (null? owner) (set! owner (default-getter)))
-	 (set! owner (convert-to-owner owner))
-	 (let* ((result (validator owner))
+         (set! owner (convert-to-owner owner))
+         (let* ((result (validator owner))
 		(valid (car result))
 		(value (cadr result)))
 	   (if valid
@@ -449,13 +332,22 @@
          sort-tag
          documentation-string
          default-value)
-  (let ((option (gnc:make-number-range-option section name sort-tag documentation-string default-value 0 999999999 0 1)))
-     (gnc:set-option-scm->kvp option (lambda (b p) (qof-book-set-option b (inexact->exact ((gnc:option-getter option))) (list "counters" key))))
-     (gnc:set-option-kvp->scm option (lambda (b p)
-                               (let ((v (qof-book-get-option b (list "counters" key))))
-                                 (if (and v (integer? v))
-                                     ((gnc:option-setter option) v)))))
-     option))
+  (let ((option (gnc:make-number-range-option
+                 section name sort-tag documentation-string
+                 default-value 0 999999999 0 1)))
+    (gnc:set-option-scm->kvp
+     option
+     (lambda (b p)
+       (qof-book-set-option
+        b (inexact->exact ((gnc:option-getter option)))
+        (list "counters" key))))
+    (gnc:set-option-kvp->scm
+     option
+     (lambda (b p)
+       (let ((v (qof-book-get-option b (list "counters" key))))
+         (if (and v (integer? v))
+             ((gnc:option-setter option) v)))))
+    option))
 
 ;; This defines an option to set a counter format, which has the same
 ;; exception as gnc:make-counter-option above.
@@ -469,24 +361,25 @@
          sort-tag
          documentation-string
          default-value)
-  (let ((option (gnc:make-string-option section name sort-tag documentation-string #f)))
-     (gnc:option-set-value option default-value)
-     (gnc:set-option-scm->kvp option
-         (lambda (b p)
-             (let ((value ((gnc:option-getter option)))
-                   (path (string-concatenate (list "counter_formats/" key))))
-                  (qof-book-set-string-option b path value))))
-     (gnc:set-option-kvp->scm option (lambda (b p)
-                               (let* ((path (string-concatenate (list "counter_formats/" key)))
-                                     (v (qof-book-get-string-option b path)))
-                                 (if (and v (string? v))
-                                     ((gnc:option-setter option) v)))))
-     option))
+  (let ((option (gnc:make-string-option
+                 section name sort-tag documentation-string #f)))
+    (gnc:option-set-value option default-value)
+    (gnc:set-option-scm->kvp
+     option
+     (lambda (b p)
+       (let ((value ((gnc:option-getter option)))
+             (path (string-concatenate (list "counter_formats/" key))))
+         (qof-book-set-string-option b path value))))
+    (gnc:set-option-kvp->scm
+     option
+     (lambda (b p)
+       (let* ((path (string-concatenate (list "counter_formats/" key)))
+              (v (qof-book-get-string-option b path)))
+         (if (and v (string? v))
+             ((gnc:option-setter option) v)))))
+    option))
 
 (export gnc:make-invoice-option)
-(export gnc:make-customer-option)
-(export gnc:make-vendor-option)
-(export gnc:make-employee-option)
 (export gnc:make-owner-option)
 (export gnc:make-taxtable-option)
 (export gnc:make-counter-option)

@@ -33,7 +33,6 @@
 #include "gnc-backend-xml.h"
 #include "gnc-component-manager.h"
 #include "gnc-uri-utils.h"
-#include "gnc-module.h"
 #include "gnc-ui.h"
 
 /* The following are copied from src/backend/xml/io-gncxml2-v2.h as a temporary
@@ -174,7 +173,7 @@ void gxi_add_custom_enc_clicked_cb (GtkButton *button, GncXmlImportData *data);
 void gxi_selected_enc_activated_cb (GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn *column, GncXmlImportData *data);
 void gxi_remove_enc_clicked_cb (GtkButton *button, GncXmlImportData *data);
 
-/* Translators: Run the assistent in your language to see GTK's translation of the button labels. */
+/* Translators: Run the assistant in your language to see GTK's translation of the button labels. */
 static const gchar *encodings_doc_string = N_(
             "\nThe file you are trying to load is from an older version of "
             "GnuCash. The file format in the older versions was missing the "
@@ -1006,8 +1005,8 @@ gxi_check_file (GncXmlImportData *data)
         }
 
         /* Translators: Please insert encodings here that are typically used in your
-         * locale, separated by spaces. No need for ASCII or UTF-8, check `locale -m`
-         * for assistance with spelling. */
+           locale, separated by spaces. No need for ASCII or UTF-8, check 'locale -m'
+           for assistance with spelling. */
         enc_array = g_strsplit (_("ISO-8859-1 KOI8-U"), " ", 0);
 
         /* loop through typical encodings */
@@ -1081,9 +1080,9 @@ gxi_parse_file (GncXmlImportData *data)
 
     /* create a temporary QofSession */
     gxi_session_destroy (data);
-    session = qof_session_new ();
+    session = qof_session_new (NULL);
     data->session = session;
-    qof_session_begin (session, data->filename, TRUE, FALSE, FALSE);
+    qof_session_begin (session, data->filename, SESSION_READ_ONLY);
     io_err = qof_session_get_error (session);
     if (io_err != ERR_BACKEND_NO_ERR)
     {
@@ -1189,9 +1188,8 @@ gxi_edit_encodings_clicked_cb (GtkButton *button, GncXmlImportData *data)
     dialog = GTK_WIDGET(gtk_builder_get_object (builder, "encodings_dialog"));
     data->encodings_dialog = dialog;
 
-
-    // Set the style context for this assistant so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(dialog), "GncAssistXmlEncoding");
+    // Set the name for this assistant so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(dialog), "gnc-id-assistant-xml-encoding");
 
     gtk_builder_connect_signals_full (builder, gnc_builder_connect_full_func, data);
 

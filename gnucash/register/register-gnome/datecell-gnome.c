@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <glib/gi18n.h>
 #include <gdk/gdkkeysyms.h>
 
 #include "datecell.h"
@@ -103,7 +104,7 @@ check_readonly_threshold (const gchar *datestr, GDate *d, gboolean warn)
             gchar *dialog_msg = _("The entered date of the transaction is "
                           "older than the \"Read-Only Threshold\" set for "
                           "this book. This setting can be changed in "
-                          "File -> Properties -> Accounts, resetting to the threshold.");
+                          "File->Properties->Accounts, resetting to the threshold.");
             gchar *dialog_title = _("Cannot store a transaction at this date");
             GtkWidget *dialog = gtk_message_dialog_new(gnc_ui_get_main_window (NULL),
                                    0,
@@ -596,6 +597,7 @@ gnc_date_cell_modify_verify (BasicCell *_cell,
     {
         gnc_basic_cell_set_value_internal (&cell->cell, newval);
         gnc_parse_date (&(box->date), newval, FALSE);
+        *end_selection = *start_selection = *cursor_position;
 
         if (!box->date_picker)
             return;

@@ -71,8 +71,10 @@ G_DEFINE_ABSTRACT_TYPE(GncHtml, gnc_html, GTK_TYPE_BIN)
 static void gnc_html_class_init( GncHtmlClass* klass );
 static void gnc_html_dispose( GObject* obj );
 static void gnc_html_finalize( GObject* obj );
-
-//#define GNC_HTML_GET_PRIVATE(o) (G_TYPE_INSTANCE_GET_PRIVATE((o), GNC_TYPE_HTML, GncHtmlPrivate))
+/*
+#define GNC_HTML_GET_PRIVATE(o) \
+     ((GncHtmlPrivate*)g_type_instance_get_private((GTypeInstance*)o, GNC_TYPE_HTML))
+*/
 #define GNC_HTML_GET_PRIVATE(o) (GNC_HTML(o)->priv)
 
 #include "gnc-html-p.h"
@@ -571,6 +573,39 @@ gnc_html_get_widget( GncHtml* self )
 
     return GNC_HTML_GET_PRIVATE(self)->container;
 }
+
+
+GtkWidget *
+gnc_html_get_webview( GncHtml* self )
+{
+    GncHtmlPrivate* priv;
+    GList *sw_list = NULL;
+    GtkWidget *webview = NULL;
+
+    g_return_val_if_fail (self != NULL, NULL);
+    g_return_val_if_fail (GNC_IS_HTML(self), NULL);
+
+    priv = GNC_HTML_GET_PRIVATE(self);
+    sw_list = gtk_container_get_children (GTK_CONTAINER(priv->container));
+
+    if (sw_list) // the scroll window has only one child
+    {
+#ifdef WEBKIT1
+        webview = sw_list->data;
+#else
+        GList *vp_list = gtk_container_get_children (GTK_CONTAINER(sw_list->data));
+ 
+        if (vp_list) // the viewport has only one child
+        {
+            webview = vp_list->data;
+            g_list_free (vp_list);
+        }
+#endif
+    }
+    g_list_free (sw_list);
+    return webview;
+}
+
 
 void
 gnc_html_set_parent( GncHtml* self, GtkWindow* parent )

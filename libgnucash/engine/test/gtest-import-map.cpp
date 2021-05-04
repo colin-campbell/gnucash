@@ -271,6 +271,14 @@ TEST_F(ImapBayesTest, FindAccountBayes)
     EXPECT_EQ(t_expense_account2, account);
     account = gnc_account_imap_find_account_bayes(t_imap, t_list5);
     EXPECT_EQ(nullptr, account);
+
+    // only imap entries with exact token matching should be considered
+    root->set_path({std::string{IMAP_FRAME_BAYES} + "/" + pepper + waldo + "/" + acct2_guid}, new KvpValue{*value});
+    account = gnc_account_imap_find_account_bayes(t_imap, t_list3);
+    EXPECT_EQ(t_expense_account1, account);
+    root->set_path({std::string{IMAP_FRAME_BAYES} + "/" + pepper + "/" + waldo + "/" + acct2_guid}, new KvpValue{*value});
+    account = gnc_account_imap_find_account_bayes(t_imap, t_list3);
+    EXPECT_EQ(t_expense_account1, account);
 }
 
 TEST_F(ImapBayesTest, AddAccountBayes)
@@ -337,6 +345,8 @@ TEST_F(ImapBayesTest, ConvertBayesData)
     root->set_path({IMAP_FRAME_BAYES, sausage, "Expense#Drink"}, val3);
     root->set_path({IMAP_FRAME_BAYES, foo, "Expense#Food"}, new KvpValue{*val2});
     root->set_path({IMAP_FRAME_BAYES, salt, acct1_guid}, new KvpValue{*val1});
+    /* make sure to reset the conversion has been run flag */
+    gnc_account_reset_convert_bayes_to_flat ();
     /*Calling into the imap functions should trigger a conversion.*/
     gnc_account_imap_add_account_bayes(t_imap, t_list5, t_expense_account2); //pork and sausage; account Food
     // convert from 'Asset-Bank' to 'Asset-Bank' guid

@@ -256,6 +256,12 @@ void gnc_book_set_root_account(QofBook *book, Account *root);
 
 /** @} */
 
+/*  Tests account and descendants -- if all have no splits then return TRUE.
+ *  Otherwise if any account or its descendants have split return FALSE.
+ */
+
+gboolean gnc_account_and_descendants_empty (Account *acc);
+
 /** Composes a translatable error message showing which account
  *  names clash with the current account separator. Can be called
  *  after gnc_account_list_name_violations to have a consistent
@@ -361,6 +367,17 @@ void gnc_account_set_balance_dirty (Account *acc);
  *  @param acc Set the flag on this account. */
 void gnc_account_set_sort_dirty (Account *acc);
 
+/** Set the defer balance flag. If defer is true, the account balance
+ * is not automatically computed, which can save a lot of time if
+ * multiple operations have to be done on the same account. If
+ * defer is false, further operations on account will cause the
+ * balance to be recomputed as normal.
+ *
+ *  @param acc Set the flag on this account.
+ *
+ *  @param defer New value for the flag. */
+void gnc_account_set_defer_bal_computation (Account *acc, gboolean defer);
+
 /** Insert the given split from an account.
  *
  *  @param acc The account to which the split should be added.
@@ -403,6 +420,8 @@ const char * xaccAccountGetNotes (const Account *account);
 const char * xaccAccountGetLastNum (const Account *account);
 /** Get the account's lot order policy */
 GNCPolicy *gnc_account_get_policy (Account *account);
+/** Get the account's flag for deferred balance computation */
+gboolean gnc_account_get_defer_bal_computation (Account *acc);
 
 /** The following recompute the partial balances (stored with the
  *  transaction) and the total balance, for this account
@@ -455,18 +474,6 @@ void dxaccAccountSetPriceSrc (Account *account, const char *src);
  *  @deprecated Price quote information is now stored on the
  *  commodity, not the account. */
 const char * dxaccAccountGetPriceSrc (const Account *account);
-
-/** Returns a per-account flag: Prior to reconciling an account which
-    charges or pays interest, this flag tells whether to prompt the
-    user to enter a transaction for the interest charge or
-    payment. This per-account flag overrides the global preference. */
-gboolean xaccAccountGetAutoInterestXfer (const Account *account,
-        gboolean default_value);
-/** Sets a per-account flag: Prior to reconciling an account which
-    charges or pays interest, this flag tells whether to prompt the
-    user to enter a transaction for the interest charge or
-    payment. This per-account flag overrides the global preference. */
-void xaccAccountSetAutoInterestXfer (Account *account, gboolean value);
 /** @} */
 
 /** @name Account Commodity setters/getters
@@ -558,6 +565,9 @@ gnc_numeric xaccAccountGetProjectedMinimumBalance (const Account *account);
 gnc_numeric xaccAccountGetBalanceAsOfDate (Account *account,
         time64 date);
 
+/** Get the reconciled balance of the account as of the date specified */
+gnc_numeric xaccAccountGetReconciledBalanceAsOfDate (Account *account, time64 date);
+
 /* These two functions convert a given balance from one commodity to
    another.  The account argument is only used to get the Book, and
    may have nothing to do with the supplied balance.  Likewise, the
@@ -574,8 +584,8 @@ gnc_numeric xaccAccountConvertBalanceToCurrency(
     const gnc_commodity *new_currency);
 gnc_numeric xaccAccountConvertBalanceToCurrencyAsOfDate(
     const Account *account, /* for book */
-    gnc_numeric balance, gnc_commodity *balance_currency,
-    gnc_commodity *new_currency, time64 date);
+    gnc_numeric balance, const gnc_commodity *balance_currency,
+    const gnc_commodity *new_currency, time64 date);
 
 /* These functions get some type of balance in the desired commodity.
    'report_commodity' may be NULL to use the account's commodity. */
@@ -595,12 +605,19 @@ gnc_numeric xaccAccountGetProjectedMinimumBalanceInCurrency (
     const Account *account, const gnc_commodity *report_commodity,
     gboolean include_children);
 
+/* This function gets the balance as of the given date, ignoring
+   closing entries, in the desired commodity. */
+gnc_numeric xaccAccountGetNoclosingBalanceAsOfDateInCurrency(
+    Account *acc, time64 date, gnc_commodity *report_commodity,
+    gboolean include_children);
 /* This function gets the balance as of the given date in the desired
    commodity. */
 gnc_numeric xaccAccountGetBalanceAsOfDateInCurrency(
     Account *account, time64 date, gnc_commodity *report_commodity,
     gboolean include_children);
 
+gnc_numeric xaccAccountGetNoclosingBalanceChangeForPeriod (
+    Account *acc, time64 date1, time64 date2, gboolean recurse);
 gnc_numeric xaccAccountGetBalanceChangeForPeriod (
     Account *acc, time64 date1, time64 date2, gboolean recurse);
 
@@ -759,7 +776,7 @@ GList * gnc_account_get_descendants (const Account *account);
  *
  *  Note: Use this function where the results are intended for display
  *  to the user.  If the results are internal to GnuCash or will be
- *  resorted at som later point in time you should use the
+ *  resorted at some later point in time you should use the
  *  gnc_account_get_descendants() function.
  *
  *  @param account The account whose descendants should be returned.
@@ -907,12 +924,38 @@ Account *gnc_account_lookup_by_name (const Account *parent, const char *name);
 Account *gnc_account_lookup_by_full_name (const Account *any_account,
         const gchar *name);
 
-/** The gnc_account_lookup_full_name() subroutine works like
+/** The gnc_account_lookup_by_code() subroutine works like
  *  gnc_account_lookup_by_name, but uses the account code.
  */
 Account *gnc_account_lookup_by_code (const Account *parent,
                                      const char *code);
 
+/** Find the opening balance account for the currency.
+ *
+ *  @param account The account of which the sought-for account is a descendant.
+ *  @param commodity The commodity in which the account should be denominated
+ *  @return The descendant account of EQUITY_TYPE_OPENING_BALANCE or NULL if one doesn't exist.
+ */
+Account *gnc_account_lookup_by_opening_balance (Account *account, gnc_commodity *commodity);
+
+/** Find a direct child account matching name, GNCAccountType, and commodity.
+ *
+ * Note that commodity matching is by equivalence: If the
+ * mnemonic/symbol and namespace are the same, it matches.
+ *
+ *  @param root The account among whose children one expects to find
+ *  the account.
+ *  @param name The name of the account to look for. If nullptr the
+ *  returned account will match only on acctype and commodity.
+ *  @param acctype The GNCAccountType to match.
+ *  @param commodity The commodity in which the account should be denominated.
+ *  @return The book's trading account for the given commodity if
+ *  trading accounts are enabled and one exists; NULL otherwise.
+ */
+Account *gnc_account_lookup_by_type_and_commodity (Account* root,
+                                                   const char* name,
+                                                   GNCAccountType acctype,
+                                                   gnc_commodity* commodity);
 /** @} */
 
 /* ------------------ */
@@ -966,6 +1009,11 @@ guint32 xaccAccountTypesValid(void);
  *  (meaning not an Accounts Payable/Accounts Receivable). */
 gboolean xaccAccountIsAssetLiabType(GNCAccountType t);
 
+/** Convenience function to return the fundamental type
+ * asset/liability/income/expense/equity given an account type. */
+GNCAccountType xaccAccountTypeGetFundamental (GNCAccountType t);
+
+
 /** Convenience function to check if the account is a valid
  *  business account type
  *  (meaning an Accounts Payable/Accounts Receivable). */
@@ -1004,7 +1052,9 @@ SplitList* xaccAccountGetSplitList (const Account *account);
 
 
 /** The xaccAccountCountSplits() routine returns the number of all
- *    the splits in the account.
+ *    the splits in the account. xaccAccountCountSplits is O(N). if
+ *    testing for emptiness, use xaccAccountGetSplitList != NULL.
+
  * @param acc the account for which to count the splits
  *
  * @param include_children also count splits in descendants (TRUE) or
@@ -1167,6 +1217,22 @@ gboolean xaccAccountGetPlaceholder (const Account *account);
  *  @param val The new state for the account's "placeholder" flag. */
 void xaccAccountSetPlaceholder (Account *account, gboolean val);
 
+/** Get the "opening-balance" flag for an account.  If this flag is set
+ *  then the account is used for opening balance transactions.
+ *
+ *  @param account The account whose flag should be retrieved.
+ *
+ *  @return The current state of the account's "opening-balance" flag. */
+gboolean xaccAccountGetIsOpeningBalance (const Account *account);
+
+/** Set the "opening-balance" flag for an account. If this flag is set
+ *  then the account is used for opening balance transactions.
+ *
+ *  @param account The account whose flag should be set.
+ *
+ *  @param val The new state for the account's "opening-balance" flag. */
+void xaccAccountSetIsOpeningBalance (Account *account, gboolean val);
+
 /** Returns PLACEHOLDER_NONE if account is NULL or neither account nor
  *  any descendant of account is a placeholder.  If account is a
  *  placeholder, returns PLACEHOLDER_THIS.  Otherwise, if any
@@ -1209,6 +1275,29 @@ void xaccAccountSetHidden (Account *acc, gboolean val);
 gboolean xaccAccountIsHidden (const Account *acc);
 /** @} */
 
+/** @name Account Auto Interest flag
+ @{
+ */
+
+/** Get the "auto interest" flag for an account.  If this flag is set then
+ *  the account (and any children) will trigger an interest transfer after reconciling.
+ *
+ *  @param acc The account whose flag should be retrieved.
+ *
+ *  @return The current state of the account's "auto interest" flag. */
+gboolean xaccAccountGetAutoInterest (const Account *acc);
+
+/** Set the "auto interest" flag for an account.  If this flag is set then
+ *  the account (and any children) will trigger an interest transfer after reconciling.
+ *
+ *  @param acc The account whose flag should be retrieved.
+ *
+ *  @param val The new state for the account's "auto interest" flag. */
+void xaccAccountSetAutoInterest (Account *acc, gboolean val);
+
+/** @} */
+
+
 /** @name Account Tax related getters/setters
  @{
 */
@@ -1229,6 +1318,17 @@ void xaccAccountSetTaxUSPayerNameSource (Account *account, const char *source);
 gint64 xaccAccountGetTaxUSCopyNumber (const Account *account);
 /** DOCUMENT ME! */
 void xaccAccountSetTaxUSCopyNumber (Account *account, gint64 copy_number);
+/** @} */
+
+/** @name Account type debit/credit string getters
+ @ {      *
+ */
+
+/** Get the debit string associated with this account type */
+const char *gnc_account_get_debit_string (GNCAccountType acct_type);
+/** Get the credit string associated with this account type */
+const char *gnc_account_get_credit_string (GNCAccountType acct_type);
+
 /** @} */
 
 
@@ -1394,7 +1494,7 @@ int xaccAccountTreeForEachTransaction(Account *acc,
  */
 GncImportMatchMap *gnc_account_imap_create_imap (Account *acc);
 
-/* Look up an Account in the map non Baysian
+/* Look up an Account in the map non-Baysian
  */
 Account* gnc_account_imap_find_account (GncImportMatchMap *imap, const char* category,
                                         const char *key);
@@ -1439,10 +1539,10 @@ GList *gnc_account_imap_get_info_bayes (Account *acc);
  */
 GList *gnc_account_imap_get_info (Account *acc, const char *category);
 
-/** Returns the text string pointed to by full_category for the Account, free
+/** Returns the text string pointed to by head and category for the Account, free
  *  the returned text
  */
-gchar *gnc_account_get_map_entry (Account *acc, const char *full_category);
+gchar *gnc_account_get_map_entry (Account *acc, const char *head, const char *category);
 
 /** Delete the entry for Account pointed to by head,category and match_string,
  *  if empty is TRUE then use delete if empty
@@ -1453,6 +1553,11 @@ void gnc_account_delete_map_entry (Account *acc, char *head, char *category,
 /** Delete all bayes entries for Account
  */
 void gnc_account_delete_all_bayes_maps (Account *acc);
+
+/** Reset the flag that indicates the function imap_convert_bayes_to_flat
+ *  has been run
+ */
+void gnc_account_reset_convert_bayes_to_flat (void);
 
 /** @} */
 
@@ -1504,6 +1609,8 @@ const char * dxaccAccountGetQuoteTZ (const Account *account);
 #define ACCOUNT_SORT_REVERSED_ "sort-reversed"
 #define ACCOUNT_NOTES_		"notes"
 #define ACCOUNT_BALANCE_	"balance"
+#define ACCOUNT_NOCLOSING_	"noclosing"
+#define ACCOUNT_OPENING_BALANCE_ "opening-balance"
 #define ACCOUNT_CLEARED_	"cleared"
 #define ACCOUNT_RECONCILED_	"reconciled"
 #define ACCOUNT_PRESENT_	"present"

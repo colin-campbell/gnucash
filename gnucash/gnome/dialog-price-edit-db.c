@@ -48,8 +48,7 @@
 #include "gnc-warnings.h"
 #include "swig-runtime.h"
 #include "guile-mappings.h"
-#include "guile-util.h"
-#include "engine-helpers-guile.h"
+#include "gnc-engine-guile.h"
 
 
 #define DIALOG_PRICE_DB_CM_CLASS "dialog-price-edit-db"
@@ -60,13 +59,16 @@
 static QofLogModule log_module = GNC_MOD_GUI;
 
 
-void gnc_prices_dialog_window_destroy_cb (GtkWidget *object, gpointer data);
+void gnc_prices_dialog_destroy_cb (GtkWidget *object, gpointer data);
 void gnc_prices_dialog_close_cb (GtkDialog *dialog, gpointer data);
 void gnc_prices_dialog_edit_clicked (GtkWidget *widget, gpointer data);
 void gnc_prices_dialog_remove_clicked (GtkWidget *widget, gpointer data);
 void gnc_prices_dialog_remove_old_clicked (GtkWidget *widget, gpointer data);
 void gnc_prices_dialog_add_clicked (GtkWidget *widget, gpointer data);
 void gnc_prices_dialog_get_quotes_clicked (GtkWidget *widget, gpointer data);
+static gboolean gnc_prices_dialog_key_press_cb (GtkWidget *widget,
+                                                GdkEventKey *event,
+                                                gpointer data);
 
 
 typedef struct
@@ -89,7 +91,7 @@ typedef struct
 
 
 void
-gnc_prices_dialog_window_destroy_cb (GtkWidget *object, gpointer data)
+gnc_prices_dialog_destroy_cb (GtkWidget *object, gpointer data)
 {
     PricesDialog *pdb_dialog = data;
 
@@ -98,12 +100,25 @@ gnc_prices_dialog_window_destroy_cb (GtkWidget *object, gpointer data)
 
     if (pdb_dialog->window)
     {
-        gtk_widget_destroy(pdb_dialog->window);
+        gtk_widget_destroy (pdb_dialog->window);
         pdb_dialog->window = NULL;
     }
 
     g_free (pdb_dialog);
     LEAVE(" ");
+}
+
+
+static gboolean
+gnc_prices_dialog_delete_event_cb (GtkWidget *widget,
+                                   GdkEvent  *event,
+                                   gpointer   data)
+{
+    PricesDialog *pdb_dialog = data;
+    // this cb allows the window size to be saved on closing with the X
+    gnc_save_window_size (GNC_PREFS_GROUP,
+                          GTK_WINDOW(pdb_dialog->window));
+    return FALSE;
 }
 
 
@@ -205,6 +220,7 @@ gnc_prices_dialog_remove_clicked (GtkWidget *widget, gpointer data)
         g_list_foreach(price_list, (GFunc)remove_helper, pdb_dialog->price_db);
     }
     g_list_free(price_list);
+    gnc_gui_refresh_all ();
     LEAVE(" ");
 }
 
@@ -289,13 +305,13 @@ gnc_prices_dialog_get_commodities (GtkTreeView *view)
         if (gtk_tree_model_get_iter (model, &iter, row->data))
         {
             gtk_tree_model_get (model, &iter, PRICED_COMM, &comm, -1);
-            comm_list = g_list_append (comm_list, comm);
+            comm_list = g_list_prepend (comm_list, comm);
         }
     }
     g_list_foreach (list, (GFunc) gtk_tree_path_free, NULL);
     g_list_free (list);
 
-    return comm_list;
+    return g_list_reverse (comm_list);
 }
 
 static void
@@ -364,7 +380,7 @@ get_fiscal_end_date (void)
     char datebuff[MAX_DATE_LENGTH + 1];
     memset (datebuff, 0, sizeof(datebuff));
     end = gnc_accounting_period_fiscal_end();
-    qof_print_date_buff(datebuff, sizeof(datebuff),
+    qof_print_date_buff(datebuff, MAX_DATE_LENGTH,
                         gnc_accounting_period_fiscal_end());
     PINFO("Fiscal end date is %s", datebuff);
 
@@ -438,7 +454,7 @@ gnc_prices_dialog_remove_old_clicked (GtkWidget *widget, gpointer data)
     result = gtk_dialog_run (GTK_DIALOG (pdb_dialog->remove_dialog));
     if (result == GTK_RESPONSE_OK)
     {
-        const char *fmt = _("Are you sure you want to delete these prices ?");
+        const char *fmt = _("Are you sure you want to delete these prices?");
         GList *comm_list = gnc_prices_dialog_get_commodities (pdb_dialog->remove_view);
 
         // Are you sure you want to delete the entries and we have commodities
@@ -504,6 +520,7 @@ gnc_prices_dialog_remove_old_clicked (GtkWidget *widget, gpointer data)
         }
         g_list_free (comm_list);
     }
+    gnc_gui_refresh_all ();
     gtk_widget_destroy (pdb_dialog->remove_dialog);
     LEAVE(" ");
 }
@@ -704,12 +721,19 @@ gnc_prices_dialog_create (GtkWidget * parent, PricesDialog *pdb_dialog)
     window = GTK_WIDGET(gtk_builder_get_object (builder, "prices_window"));
     pdb_dialog->window = window;
 
-    // Set the style context for this dialog so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(window), "GncPriceEditDialog");
+    // Set the name for this dialog so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(window), "gnc-id-price-edit");
+    gnc_widget_style_context_add_class (GTK_WIDGET(window), "gnc-class-securities");
 
     pdb_dialog->session = gnc_get_current_session();
     pdb_dialog->book = qof_session_get_book(pdb_dialog->session);
     pdb_dialog->price_db = gnc_pricedb_get_db(pdb_dialog->book);
+
+    g_signal_connect (pdb_dialog->window, "delete-event",
+                      G_CALLBACK(gnc_prices_dialog_delete_event_cb), pdb_dialog);
+
+    g_signal_connect (pdb_dialog->window, "key_press_event",
+                      G_CALLBACK (gnc_prices_dialog_key_press_cb), pdb_dialog);
 
     /* price tree */
     scrolled_window = GTK_WIDGET(gtk_builder_get_object (builder, "price_list_window"));
@@ -759,7 +783,7 @@ gnc_prices_dialog_create (GtkWidget * parent, PricesDialog *pdb_dialog)
     }
 
     g_signal_connect (pdb_dialog->window, "destroy",
-                      G_CALLBACK(gnc_prices_dialog_window_destroy_cb), pdb_dialog);
+                      G_CALLBACK(gnc_prices_dialog_destroy_cb), pdb_dialog);
 
     gtk_builder_connect_signals_full (builder, gnc_builder_connect_full_func, pdb_dialog);
     g_object_unref(G_OBJECT(builder));
@@ -799,13 +823,29 @@ show_handler (const char *klass, gint component_id,
     ENTER(" ");
     if (!pdb_dialog)
     {
-        LEAVE("no data strucure");
+        LEAVE("no data structure");
         return(FALSE);
     }
 
     gtk_window_present (GTK_WINDOW(pdb_dialog->window));
     LEAVE(" ");
     return(TRUE);
+}
+
+
+gboolean
+gnc_prices_dialog_key_press_cb (GtkWidget *widget, GdkEventKey *event,
+                                gpointer data)
+{
+    PricesDialog *pdb_dialog = data;
+
+    if (event->keyval == GDK_KEY_Escape)
+    {
+        close_handler (pdb_dialog);
+        return TRUE;
+    }
+    else
+        return FALSE;
 }
 
 

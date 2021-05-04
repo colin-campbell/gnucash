@@ -21,6 +21,10 @@
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  *                                                                  *
 \********************************************************************/
+#include <glib.h>
+#include <glib/gi18n.h>
+#include <glib/gstdio.h>
+
 extern "C"
 {
 #include <config.h>
@@ -41,9 +45,6 @@ extern "C"
 # include <unistd.h>
 #endif
 
-#include <glib.h>
-#include <glib/gi18n.h>
-#include <glib/gstdio.h>
 #include "gnc-engine.h"
 #include "Scrub.h"
 #include "TransLog.h"
@@ -424,8 +425,6 @@ gnc_write_example_account (GncExampleAccount* gea, const gchar* filename)
     write_account_tree (out, gea->root, &data);
 
     fprintf (out, "</" GNC_ACCOUNT_STRING ">\n\n");
-
-    write_emacs_trailer (out);
 
     fclose (out);
 

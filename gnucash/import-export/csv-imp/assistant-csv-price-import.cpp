@@ -52,6 +52,13 @@ extern "C"
 #include "go-charmap-sel.h"
 }
 
+#include <algorithm>
+#include <exception>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <tuple>
+
 #include "gnc-imp-settings-csv-price.hpp"
 #include "gnc-import-price.hpp"
 #include "gnc-tokenizer-fw.hpp"
@@ -66,7 +73,7 @@ static QofLogModule log_module = GNC_MOD_ASSISTANT;
 
 /* Note on memory management
  *
- * The same notes as for assistant-csv-trans-import.cpp appy to
+ * The same notes as for assistant-csv-trans-import.cpp apply to
  * this assistant as well. Please read the note at the top of that
  * file to understand important details about the use of several
  * memory management models in one file.
@@ -155,7 +162,7 @@ private:
     GtkWidget       *skip_errors_button;            /**< The widget for Skip error rows*/
     GtkWidget       *csv_button;                    /**< The widget for the CSV button */
     GtkWidget       *fixed_button;                  /**< The widget for the Fixed Width button */
-    GtkWidget       *over_write_cbutton;            /**< The widget for Price Over Write */
+    GtkWidget       *over_write_cbutton;            /**< The widget for Price Overwrite */
     GtkWidget       *commodity_selector;            /**< The widget for commodity combo box */
     GtkWidget       *currency_selector;             /**< The widget for currency combo box */
     GOCharmapSel    *encselector;                   /**< The widget for selecting the encoding */
@@ -524,6 +531,10 @@ CsvImpPriceAssist::CsvImpPriceAssist ()
     gnc_builder_add_from_file  (builder , "assistant-csv-price-import.glade", "CSV Price Assistant");
     csv_imp_asst = GTK_ASSISTANT(gtk_builder_get_object (builder, "CSV Price Assistant"));
 
+    // Set the name for this assistant so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(csv_imp_asst), "gnc-id-assistant-csv-price-import");
+    gnc_widget_style_context_add_class (GTK_WIDGET(csv_imp_asst), "gnc-class-imports");
+
     /* Enable buttons on all page. */
     gtk_assistant_set_page_complete (csv_imp_asst,
                                      GTK_WIDGET(gtk_builder_get_object (builder, "start_page")),
@@ -624,6 +635,7 @@ CsvImpPriceAssist::CsvImpPriceAssist ()
 
         auto encoding_container = GTK_CONTAINER(gtk_builder_get_object (builder, "encoding_container"));
         gtk_container_add (encoding_container, GTK_WIDGET(encselector));
+        gtk_widget_set_hexpand (GTK_WIDGET(encselector), true);
         gtk_widget_show_all (GTK_WIDGET(encoding_container));
 
         /* Add commodity selection widget */
@@ -655,6 +667,7 @@ CsvImpPriceAssist::CsvImpPriceAssist ()
         /* Add it to the assistant. */
         auto date_format_container = GTK_CONTAINER(gtk_builder_get_object (builder, "date_format_container"));
         gtk_container_add (date_format_container, GTK_WIDGET(date_format_combo));
+        gtk_widget_set_hexpand (GTK_WIDGET(date_format_combo), true);
         gtk_widget_show_all (GTK_WIDGET(date_format_container));
 
         /* Add in the currency format combo box and hook it up to an event handler. */
@@ -671,6 +684,7 @@ CsvImpPriceAssist::CsvImpPriceAssist ()
         /* Add it to the assistant. */
         auto currency_format_container = GTK_CONTAINER(gtk_builder_get_object (builder, "currency_format_container"));
         gtk_container_add (currency_format_container, GTK_WIDGET(currency_format_combo));
+        gtk_widget_set_hexpand (GTK_WIDGET(currency_format_combo), true);
         gtk_widget_show_all (GTK_WIDGET(currency_format_container));
 
         /* Connect the CSV/Fixed-Width radio button event handler. */
@@ -921,7 +935,7 @@ CsvImpPriceAssist::preview_settings_save ()
             {
                 auto response = gnc_ok_cancel_dialog (GTK_WINDOW(csv_imp_asst),
                         GTK_RESPONSE_OK,
-                        "%s", _("Setting name already exists, over write?"));
+                        "%s", _("Setting name already exists, overwrite?"));
                 if (response != GTK_RESPONSE_OK)
                     return;
 
@@ -985,7 +999,7 @@ void CsvImpPriceAssist::preview_update_skipped_rows ()
     preview_refresh_table ();
 }
 
-/* Callback triggered when user clicks on Over Write option
+/* Callback triggered when user clicks on Overwrite option
  */
 void CsvImpPriceAssist::preview_over_write (bool over)
 {

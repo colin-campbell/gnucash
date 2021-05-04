@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.22.1 -->
+<!-- Generated with glade 3.36.0 -->
 <interface>
-  <requires lib="gtk+" version="3.10"/>
+  <requires lib="gtk+" version="3.22"/>
   <object class="GtkListStore" id="currency_liststore">
     <columns>
       <!-- column-name item -->
@@ -32,6 +32,15 @@
     <signal name="cancel" handler="gnc_ui_qif_import_cancel_cb" swapped="no"/>
     <signal name="close" handler="gnc_ui_qif_import_close_cb" swapped="no"/>
     <signal name="prepare" handler="gnc_ui_qif_import_prepare_cb" swapped="no"/>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
     <child>
       <placeholder/>
     </child>
@@ -39,11 +48,14 @@
       <object class="GtkLabel" id="start_page">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="label" translatable="yes" comments="Run the assistent in your language to see GTK's translation of the button labels.">GnuCash can import financial data from QIF (Quicken Interchange Format) files written by Quicken/QuickBooks, MS Money, Moneydance, and many other programs. 
+        <property name="valign">start</property>
+        <property name="margin_start">12</property>
+        <property name="margin_end">12</property>
+        <property name="label" translatable="yes" comments="Run the assistant in your language to see GTK's translation of the button labels.">GnuCash can import financial data from QIF (Quicken Interchange Format) files written by Quicken/QuickBooks, MS Money, Moneydance, and many other programs.
 
-The import process has several steps. Your GnuCash accounts will not be changed until you click "Apply" at the end of the process. 
+The import process has several steps. Your GnuCash accounts will not be changed until you click "Apply" at the end of the process.
 
-Click "Next" to start loading your QIF data, or "Cancel" to abort the process. </property>
+Click "Next" to start loading your QIF data, or "Cancel" to abort the process.</property>
         <property name="wrap">True</property>
       </object>
       <packing>
@@ -63,9 +75,9 @@ Click "Next" to start loading your QIF data, or "Cancel" to abort the process. <
           <object class="GtkLabel" id="label822">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes" comments="Run the assistent in your language to see GTK's translation of the button labels.">Please select a file to load. When you click "Next", the file will be loaded and analyzed. You may need to answer some questions about the account(s) in the file.
+            <property name="label" translatable="yes" comments="Run the assistant in your language to see GTK's translation of the button labels.">Please select a file to load. When you click "Next", the file will be loaded and analyzed. You may need to answer some questions about the account(s) in the file.
 
-You will have the opportunity to load as many files as you wish, so don't worry if your data is in multiple files. 
+You will have the opportunity to load as many files as you wish, so don't worry if your data is in multiple files.
 </property>
             <property name="wrap">True</property>
           </object>
@@ -251,6 +263,8 @@ You will have the opportunity to load as many files as you wish, so don't worry 
               <object class="GtkTextView" id="load_progress_log">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="margin_start">3</property>
+                <property name="margin_end">3</property>
                 <property name="editable">False</property>
                 <property name="wrap_mode">word</property>
                 <property name="cursor_visible">False</property>
@@ -280,9 +294,9 @@ You will have the opportunity to load as many files as you wish, so don't worry 
           <object class="GtkLabel" id="label841">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">The QIF file format does not specify which order the day, month, and year components of a date are printed. In most cases, it is possible to automatically determine which format is in use in a particular file. However, in the file you have just imported there exist more than one possible format that fits the data. 
+            <property name="label" translatable="yes">The QIF file format does not specify which order the day, month, and year components of a date are printed. In most cases, it is possible to automatically determine which format is in use in a particular file. However, in the file you have just imported there exist more than one possible format that fits the data.
 
-Please select a date format for the file. QIF files created by European software are likely  to be in "d-m-y" or day-month-year format, where US QIF files are likely to be "m-d-y" or month-day-year. 
+Please select a date format for the file. QIF files created by European software are likely to be in "d-m-y" or day-month-year format, where US QIF files are likely to be "m-d-y" or month-day-year.
 </property>
             <property name="wrap">True</property>
           </object>
@@ -342,7 +356,7 @@ Please select a date format for the file. QIF files created by European software
           <object class="GtkLabel" id="label823">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">The QIF file that you just loaded appears to contain transactions for just one account, but the file does not specify a name for that account. 
+            <property name="label" translatable="yes">The QIF file that you just loaded appears to contain transactions for just one account, but the file does not specify a name for that account.
 
 Please enter a name for the account. If the file was exported from another accounting program, you should use the same account name that was used in that program.
 </property>
@@ -363,7 +377,7 @@ Please enter a name for the account. If the file was exported from another accou
               <object class="GtkLabel" id="label824">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Account name:</property>
+                <property name="label" translatable="yes">Account name</property>
                 <property name="justify">center</property>
               </object>
               <packing>
@@ -451,9 +465,9 @@ Please enter a name for the account. If the file was exported from another accou
           <object class="GtkLabel" id="label816">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes" comments="Run the assistent in your language to see GTK's translation of the button labels.">Click "Load another file" if you have more data to import at this time. Do this if you have saved your accounts to separate QIF files.
+            <property name="label" translatable="yes" comments="Run the assistant in your language to see GTK's translation of the button labels.">Click "Load another file" if you have more data to import at this time. Do this if you have saved your accounts to separate QIF files.
 
-Click "Next" to finish loading files and move to the next step of the QIF import process. </property>
+Click "Next" to finish loading files and move to the next step of the QIF import process.</property>
             <property name="wrap">True</property>
           </object>
           <packing>
@@ -550,7 +564,7 @@ Note that GnuCash will be creating many accounts that did not exist on your othe
           <object class="GtkLabel" id="label7609">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">_Select the matchings you want to change:</property>
+            <property name="label" translatable="yes">_Select the matchings you want to change</property>
             <property name="use_underline">True</property>
             <property name="mnemonic_widget">account_page_view</property>
           </object>
@@ -591,7 +605,7 @@ Note that GnuCash will be creating many accounts that did not exist on your othe
               <object class="GtkLabel" id="label7610">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Matchings selected:</property>
+                <property name="label" translatable="yes">Matchings selected</property>
                 <property name="wrap">True</property>
               </object>
               <packing>
@@ -653,7 +667,7 @@ Note that GnuCash will be creating many accounts that did not exist on your othe
           <object class="GtkLabel" id="label840">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">GnuCash uses separate Income and Expense accounts rather than categories to classify your transactions. Each of the categories in your QIF file will be converted to a GnuCash account. 
+            <property name="label" translatable="yes">GnuCash uses separate Income and Expense accounts rather than categories to classify your transactions. Each of the categories in your QIF file will be converted to a GnuCash account.
 
 On the next page, you will have an opportunity to look at the suggested matches between QIF categories and GnuCash accounts. You may change matches that you do not like by double-clicking on the line containing the category name.
 
@@ -682,7 +696,7 @@ If you change your mind later, you can reorganize the account structure safely w
           <object class="GtkLabel" id="label7611">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">_Select the matchings you want to change:</property>
+            <property name="label" translatable="yes">_Select the matchings you want to change</property>
             <property name="use_underline">True</property>
             <property name="mnemonic_widget">category_page_view</property>
           </object>
@@ -723,7 +737,7 @@ If you change your mind later, you can reorganize the account structure safely w
               <object class="GtkLabel" id="label7613">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Matchings selected:</property>
+                <property name="label" translatable="yes">Matchings selected</property>
                 <property name="wrap">True</property>
               </object>
               <packing>
@@ -785,9 +799,9 @@ If you change your mind later, you can reorganize the account structure safely w
           <object class="GtkLabel" id="label847707">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">QIF files downloaded from banks and other financial institutions may not have information about Accounts and Categories which would allow them to be correctly assigned to GnuCash accounts. 
+            <property name="label" translatable="yes">QIF files downloaded from banks and other financial institutions may not have information about Accounts and Categories which would allow them to be correctly assigned to GnuCash accounts.
 
-In the following page, you will see the text that appears in the Payee and Memo fields of transactions with no QIF Account or Category. By default these transactions are assigned to the 'Unspecified' account in GnuCash. If you select a different account, it will be remembered for future QIF files. </property>
+In the following page, you will see the text that appears in the Payee and Memo fields of transactions with no QIF Account or Category. By default these transactions are assigned to the 'Unspecified' account in GnuCash. If you select a different account, it will be remembered for future QIF files.</property>
             <property name="wrap">True</property>
           </object>
           <packing>
@@ -812,7 +826,7 @@ In the following page, you will see the text that appears in the Payee and Memo 
           <object class="GtkLabel" id="label7614">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">_Select the matchings you want to change:</property>
+            <property name="label" translatable="yes">_Select the matchings you want to change</property>
             <property name="use_underline">True</property>
             <property name="mnemonic_widget">memo_page_view</property>
           </object>
@@ -853,7 +867,7 @@ In the following page, you will see the text that appears in the Payee and Memo 
               <object class="GtkLabel" id="label7616">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
-                <property name="label" translatable="yes">Matchings selected:</property>
+                <property name="label" translatable="yes">Matchings selected</property>
                 <property name="wrap">True</property>
               </object>
               <packing>
@@ -958,9 +972,11 @@ In the following page, you will see the text that appears in the Payee and Memo 
           <object class="GtkLabel" id="book_option_label">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes">&lt;b&gt;Book Options&lt;/b&gt;</property>
-            <property name="use_markup">True</property>
-          </object>
+            <property name="label" translatable="yes">Book Options</property>
+            <attributes>
+              <attribute name="weight" value="bold"/>
+            </attributes>
+        </object>
           <packing>
             <property name="expand">False</property>
             <property name="fill">False</property>
@@ -1003,8 +1019,8 @@ In the following page, you will see the text that appears in the Payee and Memo 
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="margin_bottom">12</property>
-                <property name="label" translatable="yes">Below you are asked to provide information about stocks, mutual funds, and other investments that appear in the QIF file(s) you are importing. GnuCash needs some additional details about these investments that the QIF format does not provide. 
- 
+                <property name="label" translatable="yes">Below you are asked to provide information about stocks, mutual funds, and other investments that appear in the QIF file(s) you are importing. GnuCash needs some additional details about these investments that the QIF format does not provide.
+
 Each stock, mutual fund, or other investment must have a name and an abbreviation, such as a stock symbol. Because some unrelated investments have the same abbreviation, you also need to indicate what type of abbreviation you have entered. For example, you could select the exchange that assigned the symbol (NASDAQ, NYSE, etc.), or select an investment type.
 
 If you don't see your exchange listed, or none of the available choices are appropriate, you can enter a new one.</property>
@@ -1193,6 +1209,8 @@ If you don't see your exchange listed, or none of the available choices are appr
               <object class="GtkTextView" id="convert_progress_log">
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
+                <property name="margin_start">3</property>
+                <property name="margin_end">3</property>
                 <property name="editable">False</property>
                 <property name="wrap_mode">word</property>
                 <property name="cursor_visible">False</property>
@@ -1222,7 +1240,7 @@ If you don't see your exchange listed, or none of the available choices are appr
           <object class="GtkLabel" id="label847694">
             <property name="visible">True</property>
             <property name="can_focus">False</property>
-            <property name="label" translatable="yes" comments="Run the assistent in your language to see GTK's translation of the button labels.">
+            <property name="label" translatable="yes" comments="Run the assistant in your language to see GTK's translation of the button labels.">
 If you are importing a QIF file from a bank or other financial institution, some of the transactions may already exist in your GnuCash accounts. To avoid duplication, GnuCash has tried to identify matches and needs your help to review them.
 
 On the next page you will be shown a list of imported transactions. As you select each one, a list of possible matches will be shown below it. If you find a correct match, click on it. Your selection will be confirmed by a check mark in the "Match?" column.
@@ -1281,7 +1299,7 @@ Click "Next" to review the possible matches.</property>
                   <object class="GtkLabel" id="label847716">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">_Imported transactions needing review:</property>
+                    <property name="label" translatable="yes">_Imported transactions needing review</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">new_transaction_view</property>
                   </object>
@@ -1320,7 +1338,7 @@ Click "Next" to review the possible matches.</property>
                   <object class="GtkLabel" id="label847717">
                     <property name="visible">True</property>
                     <property name="can_focus">False</property>
-                    <property name="label" translatable="yes">_Possible matches for the selected transaction:</property>
+                    <property name="label" translatable="yes">_Possible matches for the selected transaction</property>
                     <property name="use_underline">True</property>
                     <property name="mnemonic_widget">old_transaction_view</property>
                   </object>
@@ -1349,7 +1367,7 @@ Click "Next" to review the possible matches.</property>
       <object class="GtkLabel" id="end_page">
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="label" translatable="yes">Click "Apply" to import data from the staging area and update your GnuCash accounts. The account and category matching information you have entered will be saved and used for defaults the next time you use the QIF import facility. 
+        <property name="label" translatable="yes">Click "Apply" to import data from the staging area and update your GnuCash accounts. The account and category matching information you have entered will be saved and used for defaults the next time you use the QIF import facility.
 
 Click "Back" to review your account and category matchings, to change currency and security settings for new accounts, or to add more files to the staging area.
 
@@ -1378,6 +1396,20 @@ Click "Cancel" to abort the QIF import process.</property>
     </child>
     <child>
       <placeholder/>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child type="titlebar">
+      <placeholder/>
+    </child>
+    <child internal-child="action_area">
+      <object class="GtkBox">
+        <property name="can_focus">False</property>
+      </object>
     </child>
   </object>
 </interface>

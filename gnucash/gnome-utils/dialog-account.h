@@ -26,6 +26,23 @@
 
 #include "Account.h"
 
+/* Note: make sure to update the help text for this in prefs.scm if these
+ * change!  These macros define the account types for which an auto interest
+ * xfer dialog could pop up, if the user's preferences allow it.
+ */
+#define account_type_has_auto_interest_charge(type)  (((type) == ACCT_TYPE_CREDIT) || \
+((type) == ACCT_TYPE_LIABILITY) ||\
+((type) == ACCT_TYPE_PAYABLE))
+
+#define account_type_has_auto_interest_payment(type) (((type) == ACCT_TYPE_BANK)  || \
+((type) == ACCT_TYPE_ASSET) || \
+((type) == ACCT_TYPE_MUTUAL) || \
+((type) == ACCT_TYPE_RECEIVABLE))
+
+#define account_type_has_auto_interest_xfer(type) \
+(  account_type_has_auto_interest_charge(type) || \
+account_type_has_auto_interest_payment(type) )
+
 /** @addtogroup GUI
     @{ */
 /** @addtogroup GuiAccount Creating and editing accounts in the GUI
@@ -43,7 +60,7 @@
 /** @name Non-Modal
  @{ */
 
-/** Disply a window for editing the attributes of an existing account.
+/** Display a window for editing the attributes of an existing account.
  *
  *  @param parent The widget on which to parent the dialog.
  *
@@ -53,7 +70,7 @@
 void gnc_ui_edit_account_window (GtkWindow *parent, Account *account);
 
 
-/** Disply a window for creating a new account.  This function will
+/** Display a window for creating a new account.  This function will
  *  also initially set the parent account of the new account to what
  *  the caller specified.  The user is free, however, to choose any
  *  parent account they wish.
@@ -71,7 +88,7 @@ void gnc_ui_new_account_window (GtkWindow *parent,
                                 QofBook *book, Account *parent_acct);
 
 
-/** Disply a window for creating a new account.  This function will
+/** Display a window for creating a new account.  This function will
  *  restrict the available account type values to the list specified
  *  by the caller.
  *
@@ -93,7 +110,7 @@ void gnc_ui_new_account_with_types (GtkWindow *parent, QofBook *book,
 /** @name Modal
  @{ */
 
-/** Disply a modal window for creating a new account
+/** Display a modal window for creating a new account
  *
  *  @param parent The widget on which to parent the dialog.
  *
@@ -103,7 +120,7 @@ void gnc_ui_new_account_with_types (GtkWindow *parent, QofBook *book,
 Account * gnc_ui_new_accounts_from_name_window (GtkWindow *parent,
                                                 const char *name);
 
-/** Disply a modal window for creating a new account.  This function
+/** Display a modal window for creating a new account.  This function
  *  will restrict the available account type values to the list
  *  specified by the caller.
  *
@@ -151,7 +168,7 @@ Account * gnc_ui_new_accounts_from_name_with_defaults (GtkWindow *parent,
                                         Account * parent_acct);
 
 /*
- * register a callback that get's called when the account has changed
+ * register a callback that gets called when the account has changed
  * so significantly that you need to destroy yourself.  In particular
  * this is used by the ledger display to destroy ledgers when the
  * account type has changed.
@@ -161,7 +178,7 @@ void gnc_ui_register_account_destroy_callback (void (*cb)(Account *));
 
 void gnc_account_renumber_create_dialog (GtkWidget *window, Account *account);
 
-void gnc_account_cascade_color_dialog (GtkWidget *window, Account *account);
+void gnc_account_cascade_properties_dialog (GtkWidget *window, Account *account);
 
 /** @} */
 /** @} */

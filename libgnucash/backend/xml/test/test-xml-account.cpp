@@ -21,13 +21,13 @@
  *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
  *  02110-1301, USA.
  */
+#include <glib.h>
+#include <glib/gstdio.h>
+
 extern "C"
 {
 #include <config.h>
 
-#include <glib.h>
-#include <glib/gstdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 #include <gnc-engine.h>
 #include <cashobjects.h>
@@ -38,6 +38,8 @@ extern "C"
 #include "Account.h"
 #include "Scrub.h"
 }
+
+#include <cstdlib>
 
 #include "../gnc-xml-helper.h"
 #include "../gnc-xml.h"
@@ -386,12 +388,11 @@ test_real_account (const char* tag, gpointer global_data, gpointer data)
 int
 main (int argc, char** argv)
 {
-    QofSession* session;
 
     qof_init ();
     cashobjects_register ();
-    session = qof_session_new ();
-    sixbook = qof_session_get_book (session);
+    sixbook = qof_book_new ();
+    auto session = qof_session_new (sixbook);
     if (argc > 1)
     {
         test_files_in_dir (argc, argv, test_real_account,

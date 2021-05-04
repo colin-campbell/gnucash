@@ -45,7 +45,11 @@
 #ifndef GNC_PREFS_H
 #define GNC_PREFS_H
 
+#ifdef __cplusplus
+extern "C++" {
 #include <glib.h>
+}
+#endif
 
 /* Preference groups used across multiple modules */
 #define GNC_PREFS_GROUP_GENERAL           "general"
@@ -552,6 +556,16 @@ void gnc_prefs_reset (const gchar *group,
  *  @param group This string specifies the group to which the preference belongs
  */
 void gnc_prefs_reset_group (const gchar *group);
+
+/** Get and Set registered preference id for register auto_raise_lists
+ */
+gulong gnc_prefs_get_reg_auto_raise_lists_id (void);
+void gnc_prefs_set_reg_auto_raise_lists_id (gulong id);
+
+/** Get and Set registered preference id for register negative_color_pref
+ */
+gulong gnc_prefs_get_reg_negative_color_pref_id (void);
+void gnc_prefs_set_reg_negative_color_pref_id (gulong id);
 
 /** @} */
 

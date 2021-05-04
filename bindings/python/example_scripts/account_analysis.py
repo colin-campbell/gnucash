@@ -35,10 +35,10 @@ from math import log10
 import csv
 
 # gnucash imports
-from gnucash import Session, GncNumeric, Split
+from gnucash import Session, GncNumeric, Split, SessionOpenMode
 
 # Invoke this script like the following example
-# $ gnucash-env python account_analysis.py gnucash_file.gnucash \
+# $ python3 account_analysis.py gnucash_file.gnucash \
 #   2010 1 monthly 12 \
 #   debits-show credits-show Assets 'Test Account'
 #
@@ -83,7 +83,7 @@ def gnc_numeric_to_python_Decimal(numeric):
     copy = GncNumeric(numeric.num(), numeric.denom())
     result = copy.to_decimal(None)
     if not result:
-        raise Exception("gnc numeric value %s can't be converted to deciaml" %
+        raise Exception("gnc numeric value %s can't be converted to decimal" %
                         copy.to_string() )
     digit_tuple = tuple( int(char)
                          for char in str(copy.num())
@@ -156,9 +156,9 @@ def main():
         print('usage: account_analysis.py {book url} {start year} {start month, numeric} {period type: monthly, quarterly, or yearly} {number of periods to show, from start year and month} {whether to show debits: debits-show for true, all other values false} {whether to show credits: credits-show for true, all other values false} {space separated account path, as many nested levels as desired} ')
         print('examples:\n')
         print("The following example analyzes 12 months of 'Assets:Test Account' from /home/username/test.gnucash, starting in January of 2010, and shows both credits and debits")
-        print("gnucash-env python account_analysis.py '/home/username/test.gnucash' 2010 1 monthly 12 debits-show credits-show Assets 'Test Account'\n")
+        print("python3 account_analysis.py '/home/username/test.gnucash' 2010 1 monthly 12 debits-show credits-show Assets 'Test Account'\n")
         print("The following example analyzes 2 quarters of 'Liabilities:First Level:Second Level' from /home/username/test.gnucash, starting March 2011, and shows credits but not debits")
-        print("gnucash-env python account_analysis.py '/home/username/test.gnucash' 2011 3 quarterly 2 debits-noshow credits-show Liabilities 'First Level' 'Second Level")
+        print("python3 account_analysis.py '/home/username/test.gnucash' 2011 3 quarterly 2 debits-noshow credits-show Liabilities 'First Level' 'Second Level")
         return
 
     try:
@@ -173,7 +173,7 @@ def main():
 
         account_path = argv[8:]
 
-        gnucash_session = Session(gnucash_file, is_new=False)
+        gnucash_session = Session(gnucash_file, SessionOpenMode.SESSION_NORMAL_OPEN)
         root_account = gnucash_session.book.get_root_account()
         account_of_interest = account_from_path(root_account, account_path)
 

@@ -43,8 +43,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stdint.h>
 #ifdef MAC_INTEGRATION
 #include <gtkmacintegration/gtkosxapplication.h>
+#elif GNC_PLATFORM_OSX
+#include <mach-o/dyld.h>
 #endif
 #endif /* ENABLE_BINRELOC */
 #include <stdio.h>
@@ -98,89 +101,46 @@ _br_find_exe (Gnc_GbrInitError *error)
     }
     g_free (prefix);
     return result;
-#elif defined MAC_INTEGRATION
-    gchar *path = gtkosx_application_get_executable_path();
-    g_print ("Application Path %s\n", path);
-    return path;
 #else
-    char *path, *path2, *line, *result;
-    size_t buf_size;
-    ssize_t size;
-    struct stat stat_buf;
+    char path[PATH_MAX + 1], path2[PATH_MAX + 1];
+    char *line, *result;
+    size_t buf_size = PATH_MAX + 1;
     FILE *f;
+    uint32_t size2;
 
-    /* Read from /proc/self/exe (symlink) */
-    if (sizeof (path) > SSIZE_MAX)
-        buf_size = SSIZE_MAX - 1;
-    else
-        buf_size = PATH_MAX - 1;
-    path = (char *) g_try_malloc (buf_size);
-    if (path == NULL)
+#ifdef MAC_INTEGRATION
+    result = gtkosx_application_get_executable_path();
+    strncpy (path2, result, buf_size - 1);
+    g_free (result);
+    g_print ("Application Path %s\n", path2);
+#elif defined GNC_PLATFORM_OSX
+    /* Native Mac, but not Aqua */
+    size2 = buf_size;
+    if (_NSGetExecutablePath (path2, &size2) != 0)
     {
-        /* Cannot allocate memory. */
+        /* buffer not big enough or some other error */
         if (error)
             *error = GNC_GBR_INIT_ERROR_NOMEM;
         return NULL;
     }
-    path2 = (char *) g_try_malloc (buf_size);
-    if (path2 == NULL)
-    {
-        /* Cannot allocate memory. */
-        if (error)
-            *error = GNC_GBR_INIT_ERROR_NOMEM;
-        g_free (path);
-        return NULL;
-    }
-
+#else
     strncpy (path2, "/proc/self/exe", buf_size - 1);
+#endif
 
-    while (1)
+    /* Follow all sym links */
+    if (realpath (path2, path) != NULL)
     {
-        int i;
-
-        size = readlink (path2, path, buf_size - 1);
-        if (size == -1)
-        {
-            /* Error. */
-            g_free (path2);
-            break;
-        }
-
-        /* readlink() success. */
-        path[size] = '\0';
-
-        /* Check whether the symlink's target is also a symlink.
-         * We want to get the final target. */
-        i = stat (path, &stat_buf);
-        if (i == -1)
-        {
-            /* Error. */
-            g_free (path2);
-            break;
-        }
-
-        /* stat() success. */
-        if (!S_ISLNK (stat_buf.st_mode))
-        {
-            /* path is not a symlink. Done. */
-            g_free (path2);
-            return path;
-        }
-
-        /* path is a symlink. Continue loop and resolve this. */
-        strncpy (path, path2, buf_size - 1);
+        return g_strdup (path);
     }
-
-
-    /* readlink() or stat() failed; this can happen when the program is
+    
+    /* realpath() failed; this can happen when the program is
      * running in Valgrind 2.2. Read from /proc/self/maps as fallback. */
 
     buf_size = PATH_MAX + 128;
-    line = (char *) g_try_realloc (path, buf_size);
+    line = (char *) g_try_malloc (buf_size);
     if (line == NULL)
     {
         /* Cannot allocate memory. */
-        g_free (path);
         if (error)
             *error = GNC_GBR_INIT_ERROR_NOMEM;
         return NULL;
@@ -221,10 +181,10 @@ _br_find_exe (Gnc_GbrInitError *error)
         line[buf_size - 1] = 0;
 
     /* Extract the filename; it is always an absolute path. */
-    path = strchr (line, '/');
+    result = strchr (line, '/');
 
     /* Sanity check. */
-    if (strstr (line, " r-xp ") == NULL || path == NULL)
+    if (strstr (line, " r-xp ") == NULL || result == NULL)
     {
         fclose (f);
         g_free (line);
@@ -233,10 +193,9 @@ _br_find_exe (Gnc_GbrInitError *error)
         return NULL;
     }
 
-    path = g_strdup (path);
-    g_free (line);
+    result = g_strdup (result);
     fclose (f);
-    return path;
+    return result;
 #endif /* ENABLE_BINRELOC */
 }
 
@@ -410,12 +369,17 @@ get_mac_bundle_prefix()
 #if defined ENABLE_BINRELOC && defined MAC_INTEGRATION
     gchar *id = gtkosx_application_get_bundle_id ();
     gchar *path = gtkosx_application_get_resource_path ();
-     if (id == NULL)
+    /* If id is nullthe app is unbundled and the path 
+       is just the path to the application directory.
+       We already have that and our version is better.
+       If GNC_UNINSTALLED is set then we're running from
+       GNC_BUILDDIR.
+    */
+    if (id == NULL || g_getenv ("GNC_UNINSTALLED"))
     {
-        gchar *dirname = g_path_get_dirname (path);
         g_free (path);
         g_free (id);
-        return dirname;
+        return NULL;
     }
     g_free (id);
     return path;
@@ -459,27 +423,36 @@ gnc_gbr_find_prefix (const gchar *default_prefix)
  *
  * If compiled_dir exists and is an absolute path then we check the dynamic
  * prefix and if it's NULL fall back first on the passed-in default and then on
- * compiled_dir; otherwise we pass the compiled PREFIX value as a default to
+ * compiled_dir;
+ * otherwise if the dynamic prefix turns out to be the compile time defined PREFIX
+ * just use that
+ * otherwise we pass the compiled PREFIX value as a default to
  * gnc_gbr_find_prefix, remove the PREFIX part (if any) from the compiled_dir
  * and append that to the retrieved prefix.
  */
 static gchar*
 find_component_directory (const gchar *default_dir, const gchar* compiled_dir)
 {
-    gchar *prefix = NULL, *dir = NULL, *subdir = NULL;
+    gchar *prefix = NULL, *dir = NULL;
+    gchar *subdir = gnc_file_path_relative_part(PREFIX, compiled_dir);
 
     prefix = gnc_gbr_find_prefix (NULL);
     if (prefix == NULL)
         return g_strdup (default_dir ? default_dir : compiled_dir);
-    subdir = gnc_file_path_relative_part(PREFIX, compiled_dir);
-    if (g_strcmp0 (compiled_dir, subdir) == 0)
+    if (!g_getenv("GNC_UNINSTALLED"))
     {
-        /* compiled_dir isn't a subdir of PREFIX. This isn't relocatable so
-         * return compiled_dir.
-         */
-        g_free (subdir);
-        g_free (prefix);
-        return g_strdup (compiled_dir);
+        if (!g_strcmp0 (prefix, PREFIX))
+            return g_strdup (compiled_dir);
+
+        if (g_strcmp0 (compiled_dir, subdir) == 0)
+        {
+            /* compiled_dir isn't a subdir of PREFIX. This isn't relocatable so
+             * return compiled_dir.
+             */
+            g_free (subdir);
+            g_free (prefix);
+            return g_strdup (compiled_dir);
+        }
     }
     dir = g_build_filename (prefix, subdir, NULL);
     g_free (subdir);
@@ -544,7 +517,6 @@ gchar *
 gnc_gbr_find_lib_dir (const gchar *default_lib_dir)
 {
     return find_component_directory (default_lib_dir, LIBDIR);
-
 }
 
 /** Locate the application's configuration files folder.
@@ -563,62 +535,7 @@ gnc_gbr_find_lib_dir (const gchar *default_lib_dir)
 gchar *
 gnc_gbr_find_etc_dir (const gchar *default_etc_dir)
 {
-    gchar *prefix, *dir, *sysconfdir;
-
-    prefix = gnc_gbr_find_prefix (NULL);
-    if (prefix == NULL)
-    {
-        /* BinReloc not initialized. */
-        if (default_etc_dir != NULL)
-            return g_strdup (default_etc_dir);
-        else
-            return NULL;
-    }
-
-    if (g_path_is_absolute (SYSCONFDIR))
-    {
-        sysconfdir = gnc_file_path_relative_part (PREFIX, SYSCONFDIR);
-        if (g_strcmp0 (sysconfdir, SYSCONFDIR) == 0)
-        {
-            g_free (sysconfdir);
-            sysconfdir = gnc_file_path_relative_part("/", SYSCONFDIR);
-        }
-        dir = g_build_filename (prefix, sysconfdir, NULL);
-        g_free (sysconfdir);
-    }
-    else if ((g_strcmp0 (PREFIX, "/opt") == 0) ||
-             (g_str_has_prefix (PREFIX, "/opt/")))
-    {
-        /* If the prefix is "/opt/..." the etc stuff will be installed in
-         * "SYSCONFDIR/opt/...", while the rest will be in "/opt/..."
-         * If this gets relocated after (make install), there will be another
-         * prefix prepended to all of that:
-         * "prefix2/opt/..."
-         * "prefix2/SYSCONFDIR/opt/..."
-         * Note: this most likely won't work on Windows. Don't try a /opt
-         * prefix on that platform...
-         */
-        gchar *std_etc_dir = g_build_filename ("/", SYSCONFDIR, PREFIX, NULL);
-
-        gchar *base_prefix_pos = g_strstr_len (prefix, -1, PREFIX);
-        if (!base_prefix_pos || base_prefix_pos == prefix)
-            dir = g_build_filename ("/", std_etc_dir, NULL);
-        else
-        {
-            gchar *prefix2 = g_strndup (prefix, base_prefix_pos - prefix);
-            dir = g_build_filename (prefix2, std_etc_dir, NULL);
-        }
-        g_free (std_etc_dir);
-
-    }
-    else
-    {
-        sysconfdir = gnc_file_path_relative_part(PREFIX, SYSCONFDIR);
-        dir = g_build_filename (prefix, sysconfdir, NULL);
-        g_free (sysconfdir);
-    }
-    g_free (prefix);
-    return dir;
+    return find_component_directory (default_etc_dir, SYSCONFDIR);
 }
 
 

@@ -17,21 +17,22 @@
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  *                                                                  *
 \********************************************************************/
+#include <glib.h>
+#include <glib/gstdio.h>
+
 extern "C"
 {
 #include <config.h>
 
-#include <glib.h>
-#include <glib/gstdio.h>
-#include <stdlib.h>
 #include <unistd.h>
 
-#include "gnc-module.h"
 #include "qof.h"
 #include "test-engine-stuff.h"
 
 #include "Account.h"
 }
+
+#include <cstdlib>
 
 #include "gnc-xml-helper.h"
 #include "gnc-xml.h"

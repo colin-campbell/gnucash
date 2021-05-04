@@ -14,7 +14,9 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: gnucash-glossary 1.8.9\n"
-"POT-Creation-Date: 2017-10-20 19:04+0200\n"
+"Report-Msgid-Bugs-To: https://bugs.gnucash.org/enter_bug.cgi?"
+"product=GnuCash&component=Translations\n"
+"POT-Creation-Date: 2021-01-10 08:00+0100\n"
 "PO-Revision-Date: 2005-04-04 10:55-0700\n"
 "Last-Translator: Steven Michael Murphy <murf@e-tools.com>\n"
 "Language-Team: Kinyarwanda <translation-team-rw@lists.sourceforge.net>\n"
@@ -27,13 +29,17 @@ msgstr ""
 msgid "Term (Dear translator: This file will never be visible to the user!)"
 msgstr ""
 
+#. "Opening and closing quote symbols and optionally their key combos like [altgr]+[Y]/[X]. Define the preferred style of quotation, see https://en.wikipedia.org/wiki/Quotation_mark#Summary_table"
+msgid "\"\""
+msgstr ""
+
 # svtools/source\dialogs\logindlg.src:DLG_LOGIN.FT_LOGIN_ACCOUNT.text
 #. "A detailed record of money spent and received"
 #, fuzzy
 msgid "account"
 msgstr "Aderesi"
 
-#. "-"
+#. "An alphanumerical key of an account in GnuCash, not at the bank, can be used to sort. Some templates provide them or the user can enter them."
 #, fuzzy
 msgid "account code"
 msgstr "Aderesi ITEGEKONGENGA"
@@ -239,6 +245,10 @@ msgstr "Igikorwa"
 msgid "action: withdraw"
 msgstr "Igikorwa"
 
+#. "As in: payable aging, or: receivable aging. The aging report categorizes payables or receivables based on time buckets. This gives an overview of which bills or invoices are overdue at which time in the future. "
+msgid "aging"
+msgstr ""
+
 # sw/source\ui\table\insrc.src:DLG_INS_ROW_COL.FT_COUNT.text
 #. "A sum of money"
 #, fuzzy
@@ -255,6 +265,16 @@ msgstr "Impuzandengo"
 #, fuzzy
 msgid "balance (noun)"
 msgstr "Izina"
+
+#. "Balance brought forward - usually the first entry of an account statement containing the 'balance c/f' of the previous billing period or page"
+#, fuzzy
+msgid "balance b/f"
+msgstr "Kuri"
+
+#. "Balance carried forward - usually the last entry of an account statement to be used as 'balance b/f' on the next billing period or page"
+#, fuzzy
+msgid "balance c/f"
+msgstr "Kuri"
 
 #. "A written record of money received and paid out, showing the difference between the two total amounts"
 #, fuzzy
@@ -385,6 +405,10 @@ msgstr "Ifaranga"
 msgid "Custom"
 msgstr "Guhanga"
 
+#. "Compact, well-structured presentation of informations. See https://en.wikipedia.org/wiki/Dashboard_(business)"
+msgid "dashboard"
+msgstr ""
+
 # #-#-#-#-#  officecfg.pot (PACKAGE VERSION)  #-#-#-#-#
 # officecfg/registry\schema\org\openoffice\Office\Writer.xcs:....Label.Inscription.Database.text
 # #-#-#-#-#  officecfg.pot (PACKAGE VERSION)  #-#-#-#-#
@@ -443,6 +467,14 @@ msgstr "Aderesi"
 msgid "double entry"
 msgstr "MAHARAKUBIRI Icyinjijwe"
 
+#. "Transactions or bills/invoices can contain a document link which links either to some file on the local disk or to some arbitrary URL."
+msgid "document link"
+msgstr ""
+
+#. "Electronic mail. Some languages allow different writings, but each team should use only one. https://en.wikipedia.org/wiki/Email"
+msgid "email"
+msgstr ""
+
 #. "a person who works for somebody or a company in return for wages"
 msgid "employee"
 msgstr ""
@@ -491,6 +523,15 @@ msgstr "Bijyanye n'umutungo Igipimo"
 msgid "financial calculator: payments"
 msgstr "Bijyanye n'umutungo Ubwishyu"
 
+#. "formal records of the financial activities and position of a business, person, or other entity. See https://en.wikipedia.org/wiki/Financial_statement for a list."
+#, fuzzy
+msgid "financial statement"
+msgstr "Igikorwa"
+
+#. "Free software is a matter of liberty, not price … see https://en.wikipedia.org/wiki/Free_software"
+msgid "free software"
+msgstr ""
+
 #. "An increase in wealth; profit; advantage (See also: capital gains)"
 msgid "gain"
 msgstr ""
@@ -529,8 +570,12 @@ msgstr ""
 msgid "liabilities/equity"
 msgstr ""
 
-#. "A sum of money that is lent (by a bank)"
+#. "A sum of money that is lent (by a bank), see also: financial calculator, Mortgage"
 msgid "loan"
+msgstr ""
+
+#. "Annual Percentage Rate, includes in contrast to the Nominal Rate some of the various costs to obtain a loan."
+msgid "loan: APR"
 msgstr ""
 
 #. "The money lost in business activity"
@@ -569,6 +614,14 @@ msgstr "Ubutumwa"
 
 #. "(a) An agreement by which money is lent by a bank for buying a house or other property, the property being the security. (b) A sum of money lent in this way."
 msgid "Mortgage"
+msgstr ""
+
+#. "Adjustable Rate Mortgage"
+msgid "mortgage: ARM"
+msgstr ""
+
+#. "Fixed Rate Mortgage"
+msgid "mortgage: FRM"
 msgstr ""
 
 #. "e.g. USD, DEM, see Currency."
@@ -823,7 +876,7 @@ msgstr "Kwiyandikisha"
 msgid "shares"
 msgstr ""
 
-#. "(of a price) A place wfrom which sth comes or is obtained"
+#. "(often: of a quote) A place from which something comes or is obtained."
 #, fuzzy
 msgid "source"
 msgstr "Inkomoko"
@@ -856,7 +909,24 @@ msgstr "Ibisobanuro"
 msgid "tax info"
 msgstr "Ibisobanuro"
 
-#. "if you create a new e.g. style sheet, you can start from a template"
+#. "Amost everybody has to declare and probably pay it. See https://en.wikipedia.org/wiki/Income_tax"
+#, fuzzy
+msgid "tax type: income tax"
+msgstr "Aderesi Ubwoko"
+
+#. "Usually only business users have to handle it, see https://en.wikipedia.org/wiki/Sales_tax."
+msgid "tax type: sales tax"
+msgstr ""
+
+#. "'Goods and Service Tax' is one form of sales tax."
+msgid "tax type: GST"
+msgstr ""
+
+#. "'Value Added Tax' is the other form of sales tax."
+msgid "tax type: VAT"
+msgstr ""
+
+#. "If you create a new e.g. style sheet, you can start from a template."
 #, fuzzy
 msgid "template"
 msgstr "Nyandiko- rugero"
@@ -934,7 +1004,7 @@ msgstr "Ubwoko"
 msgid "units"
 msgstr ""
 
-#. "-"
+#. "Uniform Resource Locator, https://en.wikipedia.org/wiki/URL"
 msgid "URL"
 msgstr "URL"
 

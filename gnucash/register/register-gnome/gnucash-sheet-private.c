@@ -60,8 +60,8 @@ find_block_by_pixel (GnucashSheet *sheet,
     SheetBlock *block;
     VirtualCellLocation vc_loc = { 1, 0 };
 
-    g_return_val_if_fail(y >= 0, NULL);
-    g_return_val_if_fail(x >= 0, NULL);
+    g_return_val_if_fail (y >= 0, NULL);
+    g_return_val_if_fail (x >= 0, NULL);
 
     do
     {
@@ -136,7 +136,7 @@ find_cell_by_pixel (GnucashSheet *sheet, gint x, gint y,
     {
         cd = gnucash_style_get_cell_dimensions (style, row, 0);
 
-        if (y >= cd->origin_y && y < cd->origin_y + cd->pixel_height)
+        if (cd && y >= cd->origin_y && y < cd->origin_y + cd->pixel_height)
             break;
 
         row++;
@@ -150,7 +150,7 @@ find_cell_by_pixel (GnucashSheet *sheet, gint x, gint y,
     {
         cd = gnucash_style_get_cell_dimensions (style, row, col);
 
-        if (x >= cd->origin_x && x < cd->origin_x + cd->pixel_width)
+        if (cd && x >= cd->origin_x && x < cd->origin_x + cd->pixel_width)
             break;
 
         col++;
@@ -199,7 +199,7 @@ get_cell_borders (GnucashSheet *sheet, VirtualLocation virt_loc,
     if (gnc_table_move_vertical_position (sheet->table, &v_loc, -1))
     {
         gnucash_sheet_get_borders (sheet, v_loc, &neighbor);
-        borders->top = MAX (borders->top, neighbor.bottom);
+        borders->top = MAX(borders->top, neighbor.bottom);
     }
 
     /* bottom */
@@ -207,7 +207,7 @@ get_cell_borders (GnucashSheet *sheet, VirtualLocation virt_loc,
     if (gnc_table_move_vertical_position (sheet->table, &v_loc, 1))
     {
         gnucash_sheet_get_borders (sheet, v_loc, &neighbor);
-        borders->bottom = MAX (borders->bottom, neighbor.top);
+        borders->bottom = MAX(borders->bottom, neighbor.top);
     }
 
     /* left */
@@ -216,7 +216,7 @@ get_cell_borders (GnucashSheet *sheet, VirtualLocation virt_loc,
     if (gnc_table_virtual_loc_valid (sheet->table, v_loc, TRUE))
     {
         gnucash_sheet_get_borders (sheet, v_loc, &neighbor);
-        borders->left = MAX (borders->left, neighbor.right);
+        borders->left = MAX(borders->left, neighbor.right);
     }
 
     /* right */
@@ -225,7 +225,7 @@ get_cell_borders (GnucashSheet *sheet, VirtualLocation virt_loc,
     if (gnc_table_virtual_loc_valid (sheet->table, v_loc, TRUE))
     {
         gnucash_sheet_get_borders (sheet, v_loc, &neighbor);
-        borders->right = MAX (borders->right, neighbor.left);
+        borders->right = MAX(borders->right, neighbor.left);
     }
 }
 
@@ -235,7 +235,7 @@ get_cell_borders (GnucashSheet *sheet, VirtualLocation virt_loc,
 specified by numerator and denominator. This is some simple integer arithmetics
 for the case when we don't even need a conversion to floating point and
 backwards. */
-static guint8 inc_intensity_byte(guint8 input, int numerator, int denominator)
+static guint8 inc_intensity_byte (guint8 input, int numerator, int denominator)
 {
     guint8 result_inv, result;
     guint8 input_inv = 0xff - input;
@@ -245,14 +245,14 @@ static guint8 inc_intensity_byte(guint8 input, int numerator, int denominator)
 }
 
 /** For a given RGB value, increase the color intensity for each of the three
-colors indentically by 10 percent (i.e. make them "less black" and "more gray")
+colors identically by 10 percent (i.e. make them "less black" and "more gray")
 and return this changed RGB value. */
-static guint32 inc_intensity_10percent(guint32 argb)
+static guint32 inc_intensity_10percent (guint32 argb)
 {
     guint32 result =
-            (inc_intensity_byte((argb & 0x00FF0000) >> 16, 8, 10) << 16)
-            + (inc_intensity_byte((argb & 0x0000FF00) >> 8, 8, 10) << 8)
-            + (inc_intensity_byte(argb & 0x000000FF, 8, 10));
+            (inc_intensity_byte ((argb & 0x00FF0000) >> 16, 8, 10) << 16)
+            + (inc_intensity_byte ((argb & 0x0000FF00) >> 8, 8, 10) << 8)
+            + (inc_intensity_byte (argb & 0x000000FF, 8, 10));
     return result;
 }
 #endif
@@ -261,7 +261,7 @@ static guint32 inc_intensity_10percent(guint32 argb)
 specified by numerator and denominator. This is some simple integer arithmetics
 for the case when we don't even need a conversion to floating point and
 backwards. */
-static guint8 dec_intensity_byte(guint8 input, int numerator, int denominator)
+static guint8 dec_intensity_byte (guint8 input, int numerator, int denominator)
 {
     guint8 result;
     result = (input * numerator) / denominator;
@@ -269,21 +269,21 @@ static guint8 dec_intensity_byte(guint8 input, int numerator, int denominator)
 }
 
 /** For a given RGB value, decrease the color intensity for each of the three
-colors indentically by 10 percent and return this changed RGB value. */
-static guint32 dec_intensity_10percent(guint32 argb)
+colors identically by 10 percent and return this changed RGB value. */
+static guint32 dec_intensity_10percent (guint32 argb)
 {
     // Multiply each single byte by 9/10 i.e. by 0.9 which decreases the
     // intensity by 10 percent.
     guint32 result =
-            (dec_intensity_byte((argb & 0x00FF0000) >> 16, 9, 10) << 16)
-            + (dec_intensity_byte((argb & 0x0000FF00) >> 8, 9, 10) << 8)
-            + (dec_intensity_byte(argb & 0x000000FF, 9, 10));
+            (dec_intensity_byte ((argb & 0x00FF0000) >> 16, 9, 10) << 16)
+            + (dec_intensity_byte ((argb & 0x0000FF00) >> 8, 9, 10) << 8)
+            + (dec_intensity_byte (argb & 0x000000FF, 9, 10));
     return result;
 }
 
 /* Actual drawing routines */
 
-G_INLINE_FUNC void
+static inline void
 draw_cell_line (cairo_t *cr, GdkRGBA *bg_color,
                 double x1, double y1, double x2, double y2,
                 PhysicalCellBorderLineStyle style);
@@ -326,8 +326,8 @@ draw_cell_line (cairo_t *cr, GdkRGBA *bg_color,
 }
 
 static void
-draw_hatching (cairo_t *cr,
-               double x, double y, G_GNUC_UNUSED double width, double height)
+draw_hatching (cairo_t *cr, double x, double y,
+               G_GNUC_UNUSED double width, double height)
 {
     GdkRGBA *fg_color;
     double h_x = x + 2.5;
@@ -375,10 +375,8 @@ draw_divider_line (cairo_t *cr, VirtualLocation virt_loc,
 }
 
 static void
-draw_cell (GnucashSheet *sheet,
-           SheetBlock *block,
-           VirtualLocation virt_loc,
-           cairo_t *cr,
+draw_cell (GnucashSheet *sheet, SheetBlock *block,
+           VirtualLocation virt_loc, cairo_t *cr,
            int x, int y, int width, int height)
 {
     GncItemEdit *item_edit = GNC_ITEM_EDIT(sheet->item_editor);
@@ -396,12 +394,30 @@ draw_cell (GnucashSheet *sheet,
     int x_offset;
     GtkStyleContext *stylectxt = gtk_widget_get_style_context (GTK_WIDGET(sheet));
     GdkRGBA color;
+    gboolean use_neg_class = TRUE;
 
     gtk_style_context_save (stylectxt);
 
+    text = gnc_table_get_entry (table, virt_loc);
+
+    // test for any text, if no text we do not want to add gnc-class-negative-numbers
+    if (!text || *text == '\0')
+        use_neg_class = FALSE;
+
     // Get the color type and apply the css class
     color_type = gnc_table_get_color (table, virt_loc, &hatching);
-    gnucash_get_style_classes (sheet, stylectxt, color_type);
+    gnucash_get_style_classes (sheet, stylectxt, color_type, use_neg_class);
+
+    if (sheet->read_only)
+    {
+        if (!gtk_style_context_has_class (stylectxt, GTK_STYLE_CLASS_BACKGROUND))
+            gtk_style_context_set_state (stylectxt, GTK_STATE_FLAG_INSENSITIVE);
+    }
+    else
+    {
+        if (gtk_style_context_has_class (stylectxt, GTK_STYLE_CLASS_BACKGROUND))
+            gtk_style_context_set_state (stylectxt, GTK_STATE_FLAG_NORMAL);
+    }
 
     // Are we in a read-only row? Then make the background color somewhat more grey.
     if ((virt_loc.phys_row_offset < block->style->nrows)
@@ -462,22 +478,20 @@ draw_cell (GnucashSheet *sheet,
 
     /* dividing line upper (red) */
     fg_color = &gn_red;
-    draw_divider_line(cr, virt_loc,
-                           table->model->dividing_row_upper, block->style->nrows,
-                           fg_color, x, y, width, height);
+    draw_divider_line (cr, virt_loc,
+                       table->model->dividing_row_upper, block->style->nrows,
+                       fg_color, x, y, width, height);
 
     /* dividing line (blue) */
     fg_color = &gn_blue;
-    draw_divider_line(cr, virt_loc,
-                           table->model->dividing_row, block->style->nrows,
-                           fg_color, x, y, width, height);
+    draw_divider_line (cr, virt_loc,
+                       table->model->dividing_row, block->style->nrows,
+                       fg_color, x, y, width, height);
 
     /* dividing line lower (blue) */
-    draw_divider_line(cr, virt_loc,
-                           table->model->dividing_row_lower, block->style->nrows,
-                           fg_color, x, y, width, height);
-
-    text = gnc_table_get_entry (table, virt_loc);
+    draw_divider_line (cr, virt_loc,
+                       table->model->dividing_row_lower, block->style->nrows,
+                       fg_color, x, y, width, height);
 
     layout = gtk_widget_create_pango_layout (GTK_WIDGET (sheet), text);
 
@@ -496,7 +510,7 @@ draw_cell (GnucashSheet *sheet,
             && (virt_loc.vcell_loc.virt_row < table->model->dividing_row_upper))
     {
         // Make text color greyed
-        gtk_style_context_add_class (stylectxt, "lighter-grey-mix");
+        gtk_style_context_add_class (stylectxt, "gnc-class-lighter-grey-mix");
     }
 #endif
 
@@ -511,7 +525,7 @@ draw_cell (GnucashSheet *sheet,
             goto exit;
 
         // Make text color greyed
-        gtk_style_context_add_class (stylectxt, "lighter-grey-mix");
+        gtk_style_context_add_class (stylectxt, "gnc-class-lighter-grey-mix");
 
         pango_layout_set_text (layout, text, strlen (text));
         pango_font_description_set_style (font, PANGO_STYLE_ITALIC);
@@ -549,10 +563,8 @@ exit:
 }
 
 static void
-draw_block (GnucashSheet *sheet,
-            SheetBlock *block,
-            VirtualLocation virt_loc,
-            cairo_t *cr,
+draw_block (GnucashSheet *sheet, SheetBlock *block,
+            VirtualLocation virt_loc, cairo_t *cr,
             int x, int y, int width, int height)
 {
     CellDimensions *cd;
@@ -560,18 +572,20 @@ draw_block (GnucashSheet *sheet,
     gint y_paint;
     gint w, h;
 
-    for ( virt_loc.phys_row_offset = 0;
+    for (virt_loc.phys_row_offset = 0;
             virt_loc.phys_row_offset < block->style->nrows ;
-            virt_loc.phys_row_offset++ )
+            virt_loc.phys_row_offset++)
     {
-        for ( virt_loc.phys_col_offset = 0;
+        for (virt_loc.phys_col_offset = 0;
                 virt_loc.phys_col_offset < block->style->ncols ;
-                virt_loc.phys_col_offset++ )
+                virt_loc.phys_col_offset++)
         {
             cd = gnucash_style_get_cell_dimensions
                  (block->style,
                   virt_loc.phys_row_offset,
                   virt_loc.phys_col_offset);
+
+            if (!cd) break;
 
             x_paint = block->origin_x + cd->origin_x - x;
             if (x_paint > width)
@@ -611,27 +625,27 @@ gnucash_sheet_draw_internal (GnucashSheet* sheet, cairo_t* cr,
     int height = alloc->height;
     GtkAdjustment * adj;
 
-    adj = gtk_scrollable_get_hadjustment(GTK_SCROLLABLE (sheet));
-    x = (gint) gtk_adjustment_get_value(adj);
-    adj = gtk_scrollable_get_vadjustment(GTK_SCROLLABLE (sheet));
-    y = (gint) gtk_adjustment_get_value(adj);
+    adj = gtk_scrollable_get_hadjustment (GTK_SCROLLABLE(sheet));
+    x = (gint) gtk_adjustment_get_value (adj);
+    adj = gtk_scrollable_get_vadjustment (GTK_SCROLLABLE(sheet));
+    y = (gint) gtk_adjustment_get_value (adj);
 
     if (x < 0 || y < 0)
         return FALSE;
 
     /* compute our initial values where we start drawing */
-    sheet_block = find_block_by_pixel (sheet, x, y,
-                  &virt_loc.vcell_loc);
+    sheet_block = find_block_by_pixel (sheet, x, y, &virt_loc.vcell_loc);
     if (!sheet_block || !sheet_block->style)
         return FALSE;
+
+    sheet->read_only = gnc_table_model_read_only (sheet->table->model);
 
     for ( ; virt_loc.vcell_loc.virt_row < sheet->num_virt_rows;
             virt_loc.vcell_loc.virt_row++ )
     {
         while (TRUE)
         {
-            sheet_block = gnucash_sheet_get_block
-                          (sheet, virt_loc.vcell_loc);
+            sheet_block = gnucash_sheet_get_block (sheet, virt_loc.vcell_loc);
 
             if (!sheet_block || !sheet_block->style)
                 return TRUE;
@@ -648,7 +662,6 @@ gnucash_sheet_draw_internal (GnucashSheet* sheet, cairo_t* cr,
         draw_block (sheet, sheet_block, virt_loc, cr,
                     x, y, width, height);
     }
-
     return TRUE;
 }
 
@@ -662,10 +675,10 @@ gnucash_sheet_draw_cursor (GnucashCursor *cursor, cairo_t *cr)
     int y = 0;
     GtkAdjustment * adj;
 
-    adj = gtk_scrollable_get_hadjustment(GTK_SCROLLABLE (cursor->sheet));
-    x = (gint) gtk_adjustment_get_value(adj);
-    adj = gtk_scrollable_get_vadjustment(GTK_SCROLLABLE (cursor->sheet));
-    y = (gint) gtk_adjustment_get_value(adj);
+    adj = gtk_scrollable_get_hadjustment (GTK_SCROLLABLE(cursor->sheet));
+    x = (gint) gtk_adjustment_get_value (adj);
+    adj = gtk_scrollable_get_vadjustment (GTK_SCROLLABLE(cursor->sheet));
+    y = (gint) gtk_adjustment_get_value (adj);
 
     fg_color = &gn_black;
 
@@ -694,13 +707,4 @@ gnucash_sheet_draw_cursor (GnucashCursor *cursor, cairo_t *cr)
 
     cairo_set_line_width (cr, 1.0);
     cairo_stroke (cr);
-}
-
-void
-gnc_widget_set_css_name (GtkWidget *widget, const char *name)
-{
-#if !GTK_CHECK_VERSION(3,20,0)
-    GtkStyleContext *context = gtk_widget_get_style_context (widget);
-    gtk_style_context_add_class (context, name);
-#endif
 }

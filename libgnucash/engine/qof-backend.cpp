@@ -49,6 +49,13 @@ G_GNUC_UNUSED static QofLogModule log_module = QOF_MOD_BACKEND;
 GModuleVec QofBackend::c_be_registry{};
 
 void
+QofBackend::commit(QofInstance* instance)
+{
+    if (qof_instance_is_dirty(instance))
+        qof_instance_mark_clean(instance);
+}
+
+void
 QofBackend::set_error(QofBackendError err)
 {
     /* use stack-push semantics. Only the earliest error counts */
@@ -102,14 +109,14 @@ QofBackend::register_backend(const char* directory, const char* module_name)
     {
         auto modname = g_strdup_printf ("lib%s.dylib", module_name);
         g_free (fullpath);
-        fullpath = g_build_filename (absdir, modname, NULL);
+        fullpath = g_build_filename (absdir, modname, nullptr);
         g_free (modname);
     }
     auto backend = g_module_open (fullpath, G_MODULE_BIND_LAZY);
     g_free (fullpath);
     if (!backend)
     {
-        PINFO ("%s: %s\n", PACKAGE, g_module_error ());
+        PINFO ("%s: %s\n", PROJECT_NAME, g_module_error ());
         return false;
     }
     void (*module_init_func)(void);

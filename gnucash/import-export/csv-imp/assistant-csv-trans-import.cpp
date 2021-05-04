@@ -64,6 +64,13 @@ extern "C"
 #include "gnc-tokenizer-fw.hpp"
 #include "gnc-tokenizer-csv.hpp"
 
+#include <algorithm>
+#include <exception>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <tuple>
+
 #include <gnc-locale-utils.hpp>
 #include <boost/locale.hpp>
 
@@ -459,8 +466,9 @@ CsvImpTransAssist::CsvImpTransAssist ()
     gnc_builder_add_from_file  (builder , "assistant-csv-trans-import.glade", "csv_transaction_assistant");
     csv_imp_asst = GTK_ASSISTANT(gtk_builder_get_object (builder, "csv_transaction_assistant"));
 
-    // Set the style context for this assistant so it can be easily manipulated with css
-    gnc_widget_set_style_context (GTK_WIDGET(csv_imp_asst), "GncAssistTransImport");
+    // Set the name for this assistant so it can be easily manipulated with css
+    gtk_widget_set_name (GTK_WIDGET(csv_imp_asst), "gnc-id-assistant-csv-transaction-import");
+    gnc_widget_style_context_add_class (GTK_WIDGET(csv_imp_asst), "gnc-class-imports");
 
     /* Enable buttons on all page. */
     gtk_assistant_set_page_complete (csv_imp_asst,
@@ -563,6 +571,7 @@ CsvImpTransAssist::CsvImpTransAssist ()
         acct_selector = gnc_account_sel_new();
         auto account_hbox = GTK_WIDGET(gtk_builder_get_object (builder, "account_hbox"));
         gtk_box_pack_start (GTK_BOX(account_hbox), acct_selector, TRUE, TRUE, 6);
+        gnc_account_sel_set_hexpand (GNC_ACCOUNT_SEL(acct_selector), true);
         gtk_widget_show (acct_selector);
 
         g_signal_connect(G_OBJECT(acct_selector), "account_sel_changed",
@@ -577,6 +586,7 @@ CsvImpTransAssist::CsvImpTransAssist ()
 
         auto encoding_container = GTK_CONTAINER(gtk_builder_get_object (builder, "encoding_container"));
         gtk_container_add (encoding_container, GTK_WIDGET(encselector));
+        gtk_widget_set_hexpand (GTK_WIDGET(encselector), true);
         gtk_widget_show_all (GTK_WIDGET(encoding_container));
 
         /* The instructions label and image */
@@ -594,6 +604,7 @@ CsvImpTransAssist::CsvImpTransAssist ()
         /* Add it to the assistant. */
         auto date_format_container = GTK_CONTAINER(gtk_builder_get_object (builder, "date_format_container"));
         gtk_container_add (date_format_container, GTK_WIDGET(date_format_combo));
+        gtk_widget_set_hexpand (GTK_WIDGET(date_format_combo), true);
         gtk_widget_show_all (GTK_WIDGET(date_format_container));
 
         /* Add in the currency format combo box and hook it up to an event handler. */
@@ -610,6 +621,7 @@ CsvImpTransAssist::CsvImpTransAssist ()
         /* Add it to the assistant. */
         auto currency_format_container = GTK_CONTAINER(gtk_builder_get_object (builder, "currency_format_container"));
         gtk_container_add (currency_format_container, GTK_WIDGET(currency_format_combo));
+        gtk_widget_set_hexpand (GTK_WIDGET(currency_format_combo), true);
         gtk_widget_show_all (GTK_WIDGET(currency_format_container));
 
         /* Connect the CSV/Fixed-Width radio button event handler. */
@@ -672,7 +684,7 @@ CsvImpTransAssist::~CsvImpTransAssist ()
     /* This function is safe to call on a null pointer */
     gnc_gen_trans_list_delete (gnc_csv_importer_gui);
     /* The call above frees gnc_csv_importer_gui but can't nullify it.
-     * Do it here so noone accidentally can access it still */
+     * Do it here so no one accidentally can access it still */
     gnc_csv_importer_gui = nullptr;
     gtk_widget_destroy (GTK_WIDGET(csv_imp_asst));
 }
@@ -890,7 +902,7 @@ CsvImpTransAssist::preview_settings_save ()
             {
                 auto response = gnc_ok_cancel_dialog (GTK_WINDOW (csv_imp_asst),
                         GTK_RESPONSE_OK,
-                        "%s", _("Setting name already exists, over write?"));
+                        "%s", _("Setting name already exists, overwrite?"));
                 if (response != GTK_RESPONSE_OK)
                     return;
 
@@ -1596,10 +1608,14 @@ void CsvImpTransAssist::preview_refresh_table ()
     g_object_unref (combostore);
 
     /* Also reset the base account combo box as it's value may have changed due to column changes here */
-    g_signal_handlers_block_by_func (acct_selector, (gpointer) csv_tximp_preview_acct_sel_cb, this);
-    gnc_account_sel_set_account(GNC_ACCOUNT_SEL(acct_selector),
-            tx_imp->base_account() , false);
-    g_signal_handlers_unblock_by_func (acct_selector, (gpointer) csv_tximp_preview_acct_sel_cb, this);
+    auto base_acct = gnc_account_sel_get_account(GNC_ACCOUNT_SEL(acct_selector));
+    if (tx_imp->base_account() != base_acct)
+    {
+        g_signal_handlers_block_by_func (acct_selector, (gpointer) csv_tximp_preview_acct_sel_cb, this);
+        gnc_account_sel_set_account(GNC_ACCOUNT_SEL(acct_selector),
+                tx_imp->base_account() , false);
+        g_signal_handlers_unblock_by_func (acct_selector, (gpointer) csv_tximp_preview_acct_sel_cb, this);
+    }
 
     /* Make the things actually appear. */
     gtk_widget_show_all (GTK_WIDGET(treeview));
@@ -1799,7 +1815,7 @@ csv_tximp_acct_match_text_parse (std::string acct_name)
 void
 CsvImpTransAssist::acct_match_select(GtkTreeModel *model, GtkTreeIter* iter)
 {
-    // Get the the stored string and account (if any)
+    // Get the stored string and account (if any)
     gchar *text = nullptr;
     Account *account = nullptr;
     gtk_tree_model_get (model, iter, MAPPING_STRING, &text,
@@ -2012,6 +2028,14 @@ CsvImpTransAssist::assist_doc_page_prepare ()
     /* Add the Cancel button for the matcher */
     cancel_button = gtk_button_new_with_mnemonic (_("_Cancel"));
     gtk_assistant_add_action_widget (csv_imp_asst, cancel_button);
+    auto button_area = gtk_widget_get_parent (cancel_button);
+
+    if (GTK_IS_HEADER_BAR(button_area))
+        gtk_container_child_set (GTK_CONTAINER(button_area),
+                                 cancel_button,
+                                 "pack-type", GTK_PACK_START,
+                                 nullptr);
+
     g_signal_connect (cancel_button, "clicked",
                      G_CALLBACK(csv_tximp_assist_close_cb), this);
     gtk_widget_show (GTK_WIDGET(cancel_button));
@@ -2048,8 +2072,26 @@ CsvImpTransAssist::assist_match_page_prepare ()
     /* Add the help button for the matcher */
     help_button = gtk_button_new_with_mnemonic (_("_Help"));
     gtk_assistant_add_action_widget (csv_imp_asst, help_button);
+    auto button_area = gtk_widget_get_parent (help_button);
+
+    if (GTK_IS_HEADER_BAR(button_area))
+    {
+        gtk_container_child_set (GTK_CONTAINER(button_area),
+                                 help_button,
+                                 "pack-type", GTK_PACK_START,
+                                 nullptr);
+    }
+    else
+    {
+        // align the help button on the left side
+        gtk_widget_set_halign (GTK_WIDGET(button_area), GTK_ALIGN_FILL);
+        gtk_widget_set_hexpand (GTK_WIDGET(button_area), TRUE);
+        gtk_box_set_child_packing (GTK_BOX(button_area), help_button,
+                                   FALSE, FALSE, 0, GTK_PACK_START);
+    }
     g_signal_connect (help_button, "clicked",
                      G_CALLBACK(on_matcher_help_clicked), gnc_csv_importer_gui);
+
     gtk_widget_show (GTK_WIDGET(help_button));
 
     /* Copy all of the transactions to the importer GUI. */
@@ -2062,6 +2104,8 @@ CsvImpTransAssist::assist_match_page_prepare ()
             draft_trans->trans = nullptr;
         }
     }
+    /* Show the matcher dialog */
+    gnc_gen_trans_list_show_all (gnc_csv_importer_gui);
 }
 
 
@@ -2072,16 +2116,11 @@ CsvImpTransAssist::assist_summary_page_prepare ()
     gtk_assistant_remove_action_widget (csv_imp_asst, help_button);
     gtk_assistant_remove_action_widget (csv_imp_asst, cancel_button);
 
-    // FIXME Rather than passing a locale generator below we probably should set std::locale::global appropriately somewhere.
-    bl::generator gen;
-    gen.add_messages_path(gnc_path_get_localedir());
-    gen.add_messages_domain(GETTEXT_PACKAGE);
-
     auto text = std::string("<span size=\"medium\"><b>");
     try
     {
     /* Translators: {1} will be replaced with a filename */
-      text += (bl::format (bl::translate ("The transactions were imported from file '{1}'.")) % m_file_name).str(gnc_get_locale());
+      text += (bl::format (bl::translate ("The transactions were imported from file '{1}'.")) % m_file_name).str(gnc_get_boost_locale());
         text += "</b></span>";
     }
     catch (const bl::conv::conversion_error& err)

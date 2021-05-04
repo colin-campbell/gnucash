@@ -77,6 +77,7 @@ typedef struct
 
     /* The editor whose status we reflect on the sheet */
     GtkWidget *editor;
+    gulong preedit_length;
 
     gboolean is_popup;
     gboolean show_popup;
@@ -90,10 +91,12 @@ typedef struct
     PopupGetWidth    popup_get_width;
     gpointer         popup_user_data;
     gint             popup_returned_height;
+    gulong           popup_height_signal_id;
 
     GtkBorder        padding;
     GtkBorder        margin;
     GtkBorder        border;
+    gint             button_width;
 
     /* Where are we */
     VirtualLocation virt_loc;
@@ -161,6 +164,8 @@ void gnc_item_edit_focus_out (GncItemEdit *item_edit);
 
 gint gnc_item_edit_get_margin (GncItemEdit *item_edit, Sides side);
 gint gnc_item_edit_get_padding_border (GncItemEdit *item_edit, Sides side);
+gint gnc_item_edit_get_button_width (GncItemEdit *item_edit);
+
 
 GType gnc_item_edit_tb_get_type (void);
 GtkWidget *gnc_item_edit_tb_new (GnucashSheet *sheet);

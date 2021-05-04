@@ -120,6 +120,7 @@ gnc_split_init(Split* split)
     split->balance             = gnc_numeric_zero();
     split->cleared_balance     = gnc_numeric_zero();
     split->reconciled_balance  = gnc_numeric_zero();
+    split->noclosing_balance   = gnc_numeric_zero();
 
     split->gains = GAINS_STATUS_UNKNOWN;
     split->gains_split = NULL;
@@ -513,6 +514,7 @@ xaccSplitReinit(Split * split)
     split->balance             = gnc_numeric_zero();
     split->cleared_balance     = gnc_numeric_zero();
     split->reconciled_balance  = gnc_numeric_zero();
+    split->noclosing_balance   = gnc_numeric_zero();
 
     qof_instance_set_idata(split, 0);
 
@@ -597,6 +599,7 @@ xaccSplitCloneNoKvp (const Split *s)
     split->balance             = s->balance;
     split->cleared_balance     = s->cleared_balance;
     split->reconciled_balance  = s->reconciled_balance;
+    split->noclosing_balance   = s->noclosing_balance;
 
     split->gains = GAINS_STATUS_UNKNOWN;
     split->gains_split = NULL;
@@ -656,7 +659,7 @@ xaccSplitDump (const Split *split, const char *tag)
 {
     char datebuff[MAX_DATE_LENGTH + 1];
     memset (datebuff, 0, sizeof(datebuff));
-    qof_print_date_buff (datebuff, sizeof(datebuff), split->date_reconciled);
+    qof_print_date_buff (datebuff, MAX_DATE_LENGTH, split->date_reconciled);
     printf("  %s Split %p", tag, split);
     printf("    Book:     %p\n", qof_instance_get_book(split));
     printf("    Account:  %p (%s)\n", split->acc,
@@ -679,6 +682,7 @@ xaccSplitDump (const Split *split, const char *tag)
     printf("    CBalance: %s\n", gnc_numeric_to_string(split->cleared_balance));
     printf("    RBalance: %s\n",
            gnc_numeric_to_string(split->reconciled_balance));
+    printf("    NoClose:  %s\n", gnc_numeric_to_string(split->noclosing_balance));
     printf("    idata:    %x\n", qof_instance_get_idata(split));
 }
 #endif
@@ -868,6 +872,9 @@ xaccSplitEqual(const Split *sa, const Split *sb,
         if (!xaccSplitEqualCheckBal ("reconciled ", sa->reconciled_balance,
                                      sb->reconciled_balance))
             return FALSE;
+        if (!xaccSplitEqualCheckBal ("noclosing ", sa->noclosing_balance,
+                                     sb->noclosing_balance))
+            return FALSE;
     }
 
     if (!xaccTransEqual(sa->parent, sb->parent, check_guids, check_txn_splits,
@@ -886,21 +893,32 @@ xaccSplitEqual(const Split *sa, const Split *sb,
  * xaccSplitListGetUniqueTransactions
  ********************************************************************/
 GList *
-xaccSplitListGetUniqueTransactions(const GList *splits)
+xaccSplitListGetUniqueTransactionsReversed (const GList *splits)
 {
-    const GList *snode;
+    GHashTable *txn_hash = g_hash_table_new (NULL, NULL);
     GList *transList = NULL;
+    const GList *snode;
 
-    for(snode = splits; snode; snode = snode->next)
+    for (snode = splits; snode; snode = snode->next)
     {
         Transaction *trans = xaccSplitGetParent((Split *)(snode->data));
 
-        GList *item = g_list_find (transList, trans);
-        if (item == NULL)
-            transList = g_list_append (transList, trans);
+        if (g_hash_table_contains (txn_hash, trans))
+            continue;
+
+        g_hash_table_insert (txn_hash, trans, NULL);
+        transList = g_list_prepend (transList, trans);
     }
+    g_hash_table_destroy (txn_hash);
     return transList;
 }
+
+GList *
+xaccSplitListGetUniqueTransactions(const GList *splits)
+{
+    return g_list_reverse (xaccSplitListGetUniqueTransactionsReversed (splits));
+}
+
 /*################## Added for Reg2 #################*/
 
 
@@ -1273,6 +1291,12 @@ xaccSplitGetBalance (const Split *s)
 }
 
 gnc_numeric
+xaccSplitGetNoclosingBalance (const Split *s)
+{
+    return s ? s->noclosing_balance : gnc_numeric_zero();
+}
+
+gnc_numeric
 xaccSplitGetClearedBalance (const Split *s)
 {
     return s ? s->cleared_balance : gnc_numeric_zero();
@@ -1609,8 +1633,7 @@ xaccSplitGetCorrAccountCode(const Split *sa)
     if (!get_corr_account_split(sa, &other_split))
     {
         if (!split_const)
-            /* Translators: This string has a disambiguation prefix */
-            split_const = Q_("Displayed account code of the other account in a multi-split transaction|Split");
+            split_const = C_("Displayed account code of the other account in a multi-split transaction", "Split");
 
         return split_const;
     }

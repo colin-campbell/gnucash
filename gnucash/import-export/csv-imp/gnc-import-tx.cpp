@@ -32,6 +32,15 @@ extern "C" {
 #include <glib/gi18n.h>
 }
 
+#include <algorithm>
+#include <exception>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
+
 #include <boost/regex.hpp>
 #include <boost/regex/icu.hpp>
 
@@ -392,11 +401,12 @@ void GncTxImport::tokenize (bool guessColTypes)
     m_parsed_lines.clear();
     for (auto tokenized_line : m_tokenizer->get_tokens())
     {
-        m_parsed_lines.push_back (std::make_tuple (tokenized_line, std::string(),
-                std::make_shared<GncPreTrans>(date_format()),
-                std::make_shared<GncPreSplit>(date_format(), currency_format()),
-                false));
         auto length = tokenized_line.size();
+        if (length > 0)
+            m_parsed_lines.push_back (std::make_tuple (tokenized_line, std::string(),
+                    std::make_shared<GncPreTrans>(date_format()),
+                    std::make_shared<GncPreSplit>(date_format(), currency_format()),
+                    false));
         if (length > max_cols)
             max_cols = length;
     }
@@ -658,7 +668,7 @@ void GncTxImport::create_transaction (std::vector<parse_line_t>::iterator& parse
         {
             // Oops - the user didn't select an Account column *and* we didn't get a default value either!
             // Note if you get here this suggests a bug in the code!
-            error_message = _("No account column selected and no default account specified either.\n"
+            error_message = _("No account column selected and no base account specified either.\n"
                                        "This should never happen. Please report this as a bug.");
             PINFO("User warning: %s", error_message.c_str());
             throw std::invalid_argument(error_message);
@@ -791,23 +801,40 @@ void GncTxImport::update_pre_split_props (uint32_t row, uint32_t col, GncTransPr
 
     auto split_props = std::get<PL_PRESPLIT>(m_parsed_lines[row]);
 
-    if (col == std::get<PL_INPUT>(m_parsed_lines[row]).size())
-        split_props->reset (prop_type);
-    else
+    split_props->reset (prop_type);
+    try
     {
-        try
+        // Except for Deposit or Withdrawal lines there can only be
+        // one column with a given property type.
+        if ((prop_type != GncTransPropType::DEPOSIT) &&
+            (prop_type != GncTransPropType::WITHDRAWAL))
         {
             auto value = std::get<PL_INPUT>(m_parsed_lines[row]).at(col);
             split_props->set(prop_type, value);
         }
-        catch (const std::exception& e)
+        else
         {
-            /* Do nothing, just prevent the exception from escalating up
-             * However log the error if it happens on a row that's not skipped
-             */
-            if (!std::get<PL_SKIP>(m_parsed_lines[row]))
-                PINFO("User warning: %s", e.what());
+            // For Deposits and Withdrawal we have to sum all columns with this property
+            for (auto col_it = m_settings.m_column_types.cbegin();
+                      col_it < m_settings.m_column_types.cend();
+                      col_it++)
+            {
+                if (*col_it == prop_type)
+                {
+                    auto col_num = col_it - m_settings.m_column_types.cbegin();
+                    auto value = std::get<PL_INPUT>(m_parsed_lines[row]).at(col_num);
+                    split_props->add (prop_type, value);
+                }
+            }
         }
+    }
+    catch (const std::exception& e)
+    {
+        /* Do nothing, just prevent the exception from escalating up
+            * However log the error if it happens on a row that's not skipped
+            */
+        if (!std::get<PL_SKIP>(m_parsed_lines[row]))
+            PINFO("User warning: %s", e.what());
     }
 }
 
@@ -822,8 +849,11 @@ GncTxImport::set_column_type (uint32_t position, GncTransPropType type, bool for
     if ((type == old_type) && !force)
         return; /* Nothing to do */
 
-    // Column types should be unique, so remove any previous occurrence of the new type
-    std::replace(m_settings.m_column_types.begin(), m_settings.m_column_types.end(),
+    // Column types except deposit and withdrawal should be unique,
+    // so remove any previous occurrence of the new type
+    if ((type != GncTransPropType::DEPOSIT) &&
+        (type != GncTransPropType::WITHDRAWAL))
+        std::replace(m_settings.m_column_types.begin(), m_settings.m_column_types.end(),
             type, GncTransPropType::NONE);
 
     m_settings.m_column_types.at (position) = type;

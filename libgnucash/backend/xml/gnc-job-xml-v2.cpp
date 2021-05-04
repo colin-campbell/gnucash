@@ -21,11 +21,11 @@
  * Boston, MA  02110-1301,  USA       gnu@gnu.org                   *
  *                                                                  *
 \********************************************************************/
+#include <glib.h>
+
 extern "C"
 {
 #include <config.h>
-
-#include <glib.h>
 #include <stdlib.h>
 #include <string.h>
 #include "gncJobP.h"
@@ -146,7 +146,7 @@ job_guid_handler (xmlNodePtr node, gpointer job_pdata)
         gncJobSetGUID (pdata->job, guid);
     }
 
-    g_free (guid);
+    guid_free (guid);
 
     return TRUE;
 }

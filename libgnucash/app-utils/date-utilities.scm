@@ -21,10 +21,105 @@
 ;; Boston, MA  02110-1301,  USA       gnu@gnu.org
 
 
-(use-modules (gnucash core-utils)
-             (gnucash gettext))
+(define-module (gnucash app-utils date-utilities))
 
-(define gnc:reldate-list '())
+(eval-when (compile load eval expand)
+  (load-extension "libgnc-app-utils" "scm_init_sw_app_utils_module"))
+
+(use-modules (gnucash engine))
+(use-modules (gnucash core-utils))
+(use-modules (gnucash utilities))
+(use-modules (sw_app_utils))
+(use-modules (ice-9 match))
+
+(export gnc:reldate-list)
+(export gnc:date-get-year)
+(export gnc:date-get-quarter)
+(export gnc:date-get-month-day)
+(export gnc:date-get-month)
+(export gnc:date-get-week-day)
+(export gnc:date-get-week)
+(export gnc:date-get-year-day)
+(export gnc:time64-get-year)
+(export gnc:time64-get-quarter)
+(export gnc:time64-get-month-day)
+(export gnc:time64-get-month)
+(export gnc:time64-get-week-day)
+(export gnc:time64-get-week)
+(export gnc:time64-get-year-day)
+(export gnc:date-get-year-string)
+(export gnc:date-get-quarter-string)
+(export gnc:date-get-quarter-year-string)
+(export gnc:date-get-month-string)
+(export gnc:date-get-month-year-string)
+(export gnc:date-get-week-year-string)
+(export gnc:leap-year?)
+(export gnc:days-in-year)
+(export gnc:days-in-month)
+(export gnc:date-to-year-fraction)
+(export gnc:date-year-delta)
+(export gnc:date-to-month-fraction)
+(export gnc:date-to-week-fraction)
+(export gnc:date-to-week)
+(export gnc:date-to-day-fraction)
+(export gnc:date-get-fraction-func)
+(export moddatek)
+(export decdate)
+(export incdate)
+(export decdate)
+(export incdate)
+(export gnc:make-date-interval-list)
+(export gnc:make-date-list)
+(export SecDelta)
+(export DayDelta)
+(export WeekDelta)
+(export TwoWeekDelta)
+(export MonthDelta)
+(export QuarterDelta)
+(export HalfYearDelta)
+(export YearDelta)
+(export ThirtyDayDelta)
+(export NinetyDayDelta)
+(export gnc:deltasym-to-delta)
+(export gnc:time64-start-day-time)
+(export gnc:time64-end-day-time)
+(export gnc:time64-previous-day)
+(export gnc:time64-next-day)
+(export gnc:reldate-get-symbol)
+(export gnc:reldate-get-string)
+(export gnc:reldate-get-desc)
+(export gnc:reldate-get-fn)
+(export gnc:get-absolute-from-relative-date)
+(export gnc:get-relative-date-string)
+(export gnc:get-relative-date-desc)
+(export gnc:get-start-cal-year)
+(export gnc:get-end-cal-year)
+(export gnc:get-start-prev-year)
+(export gnc:get-end-prev-year)
+(export gnc:get-start-this-month)
+(export gnc:get-end-this-month)
+(export gnc:get-start-prev-month)
+(export gnc:get-end-prev-month)
+(export gnc:get-start-current-quarter)
+(export gnc:get-end-current-quarter)
+(export gnc:get-start-prev-quarter)
+(export gnc:get-end-prev-quarter)
+(export gnc:get-today)
+(export gnc:get-one-month-ago)
+(export gnc:get-three-months-ago)
+(export gnc:get-six-months-ago)
+(export gnc:get-one-year-ago)
+(export gnc:reldate-initialize)
+(export gnc:get-end-next-month)
+(export gnc:get-end-next-quarter)
+(export gnc:get-end-next-year)
+(export gnc:get-one-month-ahead)
+(export gnc:get-one-year-ahead)
+(export gnc:get-six-months-ahead)
+(export gnc:get-start-next-month)
+(export gnc:get-start-next-quarter)
+(export gnc:get-start-next-year)
+(export gnc:get-three-months-ahead)
 
 ;; get stuff from localtime date vector
 (define (gnc:date-get-year datevec)
@@ -71,7 +166,7 @@
   (gnc-print-time64 (gnc-mktime datevec) "%Y"))
 
 (define (gnc:date-get-quarter-string datevec)
-  (format #f "Q~d" (gnc:date-get-quarter datevec)))
+  (format #f "Q~a" (gnc:date-get-quarter datevec)))
 
 (define (gnc:date-get-quarter-year-string datevec)
   (string-append 
@@ -86,12 +181,10 @@
   (gnc-print-time64 (gnc-mktime datevec) "%B %Y"))
 
 (define (gnc:date-get-week-year-string datevec)
-  (let* ((beginweekt64 (* (gnc:time64-get-week
-                            (gnc-mktime datevec))
-                          604800))
-         (begin-string (qof-print-date (+ beginweekt64 345600)))
-         (end-string (qof-print-date (+ beginweekt64 864000))))
-    (format #f (_ "~a to ~a") begin-string end-string)))
+  (let* ((beginweekt64 (* (gnc:time64-get-week (gnc-mktime datevec)) 7 86400))
+         (begin-string (qof-print-date (+ beginweekt64 (* 3 86400))))
+         (end-string (qof-print-date (+ beginweekt64 (* 9 86400)))))
+    (format #f (G_ "~a to ~a") begin-string end-string)))
 
 ;; is leap year?
 (define (gnc:leap-year? year)
@@ -115,8 +208,8 @@
 (define (gnc:date-to-year-fraction caltime)
   (let ((lt (gnc-localtime caltime)))
     (+ (- (gnc:date-get-year lt) 1970)
-       (/ (- (gnc:date-get-year-day lt) 1.0)
-	  (* 1.0 (gnc:days-in-year (gnc:date-get-year lt)))))))
+       (/ (- (gnc:date-get-year-day lt) 1)
+          (gnc:days-in-year (gnc:date-get-year lt))))))
 
 ;; return the number of years (in floating point format) between two dates.
 (define (gnc:date-year-delta caltime1 caltime2)
@@ -151,24 +244,28 @@
 ;; convert a date in seconds since 1970 into # of months since 1970
 (define (gnc:date-to-month-fraction caltime)
   (let ((lt (gnc-localtime caltime)))
-    (+ (* 12 (- (gnc:date-get-year lt) 1970.0))
+    (+ (* 12 (- (gnc:date-get-year lt) 1970))
        (gnc:date-get-month lt) -1
-       (/ (- (gnc:date-get-month-day lt) 1.0) (gnc:days-in-month 
-					       (gnc:date-get-month lt)
-					       (gnc:date-get-year lt))))))
+       (/ (- (gnc:date-get-month-day lt) 1)
+          (gnc:days-in-month
+	   (gnc:date-get-month lt)
+	   (gnc:date-get-year lt))))))
 
-;; convert a date in seconds since 1970 into # of two-week periods since
-;; Jan 4, 1970 ignoring leap-seconds (just halfing date-to-week-fraction)
 (define (gnc:date-to-twoweek-fraction caltime)
   (/ (gnc:date-to-week-fraction caltime) 2))
 
-;; convert a date in seconds since 1970 into # of weeks since Jan 4, 1970
-;; ignoring leap-seconds
+;; which dow does the week start? 1=Sunday, 2=Monday etc
+(define weekstart
+  (let ((dow (gnc-start-of-week)))
+    (cond
+     ((zero? dow) (gnc:warn "cannot determine start of week. using Sunday") 1)
+     (else dow))))
+
 (define (gnc:date-to-week-fraction caltime)
-  (/ (- (/ (/ caltime 3600.0) 24) 3) 7))
+  (/ (- (/ caltime 86400) 1 weekstart) 7))
 
 (define (gnc:date-to-week caltime)
-  (floor (/ (- (/ caltime 86400) 3) 7)))
+  (floor (gnc:date-to-week-fraction caltime)))
 
 ;; convert a date in seconds since 1970 into # of days since Feb 28, 1970
 ;; ignoring leap-seconds
@@ -206,15 +303,6 @@
 (define (decdate adate delta) (moddate - adate delta ))
 (define (incdate adate delta) (moddate + adate delta ))
 
-;; date-granularity comparison functions.
-
-(define (gnc:time64-le-date t1 t2)
-  (<= (time64CanonicalDayTime t1)
-      (time64CanonicalDayTime t2)))
-
-(define (gnc:time64-ge-date t1 t2)
-  (gnc:time64-le-date t2 t1))
-
 ;; returns #t if adding 1 to mday causes a month change.
 (define (end-month? date)
   (let ((nextdate (gnc-localtime date)))
@@ -249,6 +337,8 @@
 (define (gnc:make-date-interval-list startdate enddate incr)
   (define month-delta
     (assv-ref MonthDeltas incr))
+  (define (make-interval from to)
+    (list from (if (< to enddate) (decdate to SecDelta) enddate)))
   (let loop ((result '())
              (date startdate)
              (idx 0))
@@ -258,20 +348,12 @@
      (month-delta
       (let* ((curr (incdate-months startdate (* month-delta idx)))
              (next (incdate-months startdate (* month-delta (1+ idx)))))
-        (loop (cons (list curr
-                          (if (< next enddate)
-                              (decdate next SecDelta)
-                              enddate))
-                    result)
+        (loop (cons (make-interval curr next) result)
               next
               (1+ idx))))
      (else
       (let ((next (incdate date incr)))
-        (loop (cons (list date
-                          (if (< next enddate)
-                              (decdate next SecDelta)
-                              enddate))
-                    result)
+        (loop (cons (make-interval date next) result)
               next
               (1+ idx)))))))
 
@@ -420,50 +502,45 @@
 (define (gnc:time64-next-day t64)
   (incdate t64 DayDelta))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; relative-date functions start here
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (gnc:reldate-get-symbol x) (vector-ref x 0))
 (define (gnc:reldate-get-string x) (vector-ref x 1))
 (define (gnc:reldate-get-desc x) (vector-ref x 2))
 (define (gnc:reldate-get-fn x) (vector-ref x 3))
 
-(define (gnc:make-reldate-hash hash reldate-list)
-  (map (lambda (reldate) (hash-set! 
-			  hash 
-			  (gnc:reldate-get-symbol reldate)
-			  reldate))
-       reldate-list))
-
-(define gnc:reldate-string-db (gnc:make-string-database))
-
-(define gnc:relative-date-values '())
-
-(define gnc:relative-date-hash (make-hash-table 23))
+;; the globally available hash of reldates (hash-key = reldate
+;; symbols, hash-value = a vector, reldate data).
+(define gnc:relative-date-hash #f)
 
 (define (gnc:get-absolute-from-relative-date date-symbol)
+  ;; used in options.scm
   (let ((rel-date-data (hash-ref gnc:relative-date-hash date-symbol)))
     (if rel-date-data
         ((gnc:reldate-get-fn rel-date-data))
-        (let* ((msg (_ "Tried to look up an undefined date symbol \
+        (let* ((msg (G_ "Tried to look up an undefined date symbol \
 '~a'. This report was probably saved by a later version of GnuCash. \
 Defaulting to today."))
                (conmsg (format #f msg date-symbol))
-               (uimsg (format #f (_ msg) date-symbol)))
+               (uimsg (format #f (G_ msg) date-symbol)))
           (gnc:gui-warn conmsg uimsg)
           (current-time)))))
 
-(define (gnc:get-relative-date-strings date-symbol)
-  (let ((rel-date-info (hash-ref gnc:relative-date-hash date-symbol)))
-    
-    (cons (gnc:reldate-get-string rel-date-info)
-	  (gnc:relate-get-desc rel-date-info))))
-
 (define (gnc:get-relative-date-string date-symbol)
+  ;; used in options.scm
   (let ((rel-date-info (hash-ref gnc:relative-date-hash date-symbol)))
     (gnc:reldate-get-string rel-date-info)))
 
 (define (gnc:get-relative-date-desc date-symbol)
+  ;; used in options.scm
   (let ((rel-date-info (hash-ref gnc:relative-date-hash date-symbol)))
     (gnc:reldate-get-desc rel-date-info)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; end relative-date functions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (gnc:get-start-cal-year)
   (let ((now (gnc-localtime (current-time))))
@@ -508,6 +585,7 @@ Defaulting to today."))
     (gnc-mktime now)))
 
 (define (gnc:get-start-next-year)
+  (issue-deprecation-warning "gnc:get-start-next-year is deprecated.")
   (let ((now (gnc-localtime (current-time))))
     (set-tm:sec now 0)
     (set-tm:min now 0)
@@ -519,6 +597,7 @@ Defaulting to today."))
     (gnc-mktime now)))
 
 (define (gnc:get-end-next-year)
+  (issue-deprecation-warning "gnc:get-end-next-year is deprecated.")
   (let ((now (gnc-localtime (current-time))))
     (set-tm:sec now 59)
     (set-tm:min now 59)
@@ -584,6 +663,7 @@ Defaulting to today."))
     (gnc-mktime now)))
     
 (define (gnc:get-start-next-month)
+  (issue-deprecation-warning "gnc:get-start-next-month is deprecated.")
   (let ((now (gnc-localtime (current-time))))
     (set-tm:sec now 0)
     (set-tm:min now 0)
@@ -598,6 +678,7 @@ Defaulting to today."))
     (gnc-mktime now)))
 
 (define (gnc:get-end-next-month)
+  (issue-deprecation-warning "gnc:get-end-next-month is deprecated.")
   (let ((now (gnc-localtime (current-time))))
     (set-tm:sec now 59)
     (set-tm:min now 59) 
@@ -666,6 +747,7 @@ Defaulting to today."))
     (gnc-mktime now)))
 
 (define (gnc:get-start-next-quarter)
+  (issue-deprecation-warning "gnc:get-start-next-quarter is deprecated.")
   (let ((now (gnc-localtime (current-time))))
     (set-tm:sec now 0)
     (set-tm:min now 0)
@@ -680,6 +762,7 @@ Defaulting to today."))
     (gnc-mktime now)))
 
 (define (gnc:get-end-next-quarter)
+  (issue-deprecation-warning "gnc:get-end-next-quarter is deprecated.")
   (let ((now (gnc-localtime (current-time))))
     (set-tm:sec now 59)
     (set-tm:min now 59)
@@ -699,6 +782,7 @@ Defaulting to today."))
   (current-time))
 
 (define (gnc:get-one-month-ago)
+  (issue-deprecation-warning "gnc:get-one-month-ago is deprecated.")
   (let ((now (gnc-localtime (current-time))))
     (if (= (tm:mon now) 0)
 	(begin
@@ -713,12 +797,13 @@ Defaulting to today."))
       (gnc-mktime now))))
 
 (define (gnc:get-three-months-ago)
+  (issue-deprecation-warning "gnc:get-three-months-ago is unused.")
   (let ((now (gnc-localtime (current-time))))
     (if (< (tm:mon now) 3)
 	(begin
-	  (set:tm-mon now (+ (tm:mon now) 12))
-	  (set:tm-year now  (- (tm:year now) 1))))
-    (set:tm-mon now (- (tm:mon now) 3))
+	  (set-tm:mon now (+ (tm:mon now) 12))
+	  (set-tm:year now  (- (tm:year now) 1))))
+    (set-tm:mon now (- (tm:mon now) 3))
     (let ((month-days (gnc:days-in-month (+ (tm:mon now) 1)
                                          (+ (tm:year now) 1900))))
       (if (< month-days (tm:mday now))
@@ -727,12 +812,13 @@ Defaulting to today."))
       (gnc-mktime now))))
 
 (define (gnc:get-six-months-ago)
+  (issue-deprecation-warning "gnc:get-six-months-ago is unused.")
   (let ((now (gnc-localtime (current-time))))
     (if (< (tm:mon now) 6)
 	(begin
-	  (set:tm-mon now (+ (tm:mon now) 12))
-	  (set:tm-year now  (- (tm:year now) 1))))
-    (set:tm-mon now (- (tm:mon now) 6))
+	  (set-tm:mon now (+ (tm:mon now) 12))
+	  (set-tm:year now  (- (tm:year now) 1))))
+    (set-tm:mon now (- (tm:mon now) 6))
     (let ((month-days (gnc:days-in-month (+ (tm:mon now) 1)
                                          (+ (tm:year now) 1900))))
       (if (< month-days (tm:mday now))
@@ -741,8 +827,9 @@ Defaulting to today."))
       (gnc-mktime now))))
 
 (define (gnc:get-one-year-ago)
+  (issue-deprecation-warning "gnc:get-one-year-ago is unused.")
   (let ((now (gnc-localtime (current-time))))
-    (set:tm-year now (- (tm:year now) 1))
+    (set-tm:year now (- (tm:year now) 1))
     (let ((month-days (gnc:days-in-month (+ (tm:mon now) 1)
                                          (+ (tm:year now) 1900))))
       (if (< month-days (tm:mday now))
@@ -751,6 +838,7 @@ Defaulting to today."))
       (gnc-mktime now))))
 
 (define (gnc:get-one-month-ahead)
+  (issue-deprecation-warning "gnc:get-one-month-ahead is deprecated.")
   (let ((now (gnc-localtime (current-time))))
     (if (= (tm:mon now) 11)
 	(begin
@@ -765,12 +853,13 @@ Defaulting to today."))
       (gnc-mktime now))))
 
 (define (gnc:get-three-months-ahead)
+  (issue-deprecation-warning "gnc:get-three-months-ahead is unused.")
   (let ((now (gnc-localtime (current-time))))
     (if (> (tm:mon now) 8)
 	(begin
-	  (set:tm-mon now (- (tm:mon now) 9))
-	  (set:tm-year now  (+ (tm:year now) 1))
-          (set:tm-mon now (+ (tm:mon now) 3))))
+	  (set-tm:mon now (- (tm:mon now) 9))
+	  (set-tm:year now  (+ (tm:year now) 1))
+          (set-tm:mon now (+ (tm:mon now) 3))))
     (let ((month-days (gnc:days-in-month (+ (tm:mon now) 1)
                                          (+ (tm:year now) 1900))))
       (if (< month-days (tm:mday now))
@@ -779,12 +868,13 @@ Defaulting to today."))
       (gnc-mktime now))))
 
 (define (gnc:get-six-months-ahead)
+  (issue-deprecation-warning "gnc:get-six-months-ahead is unused.")
   (let ((now (gnc-localtime (current-time))))
     (if (> (tm:mon now) 5)
 	(begin
-	  (set:tm-mon now (- (tm:mon now) 6))
-	  (set:tm-year now  (+ (tm:year now) 1))
-          (set:tm-mon now (+ (tm:mon now) 6))))
+	  (set-tm:mon now (- (tm:mon now) 6))
+	  (set-tm:year now  (+ (tm:year now) 1))
+          (set-tm:mon now (+ (tm:mon now) 6))))
     (let ((month-days (gnc:days-in-month (+ (tm:mon now) 1)
                                          (+ (tm:year now) 1900))))
       (if (< month-days (tm:mday now))
@@ -793,8 +883,9 @@ Defaulting to today."))
       (gnc-mktime now))))
 
 (define (gnc:get-one-year-ahead)
+  (issue-deprecation-warning "gnc:get-one-year-ahead is unused.")
   (let ((now (gnc-localtime (current-time))))
-    (set:tm-year now (+ (tm:year now) 1))
+    (set-tm:year now (+ (tm:year now) 1))
     (let ((month-days (gnc:days-in-month (+ (tm:mon now) 1)
                                          (+ (tm:year now) 1900))))
       (if (< month-days (tm:mday now))
@@ -813,7 +904,17 @@ Defaulting to today."))
 ;;one-month-ago three-months-ago six-months-ago one-year-ago
 ;;start-cur-fin-year start-prev-fin-year end-prev-fin-year
 
-(define (gnc:reldate-initialize)
+
+(define (make-string-database)
+  (define string-hash (make-hash-table))
+  (match-lambda*
+    (('lookup key) (G_ (hash-ref string-hash key)))
+    (('store key string) (hash-set! string-hash key string))
+    (_ (gnc:warn "string-database: bad action"))))
+
+(define gnc:reldate-string-db (make-string-database))
+(define gnc:relative-date-values #f)
+(unless gnc:relative-date-hash
   (gnc:reldate-string-db 
    'store 'start-cal-year-string 
    (N_ "Start of this year"))
@@ -1137,7 +1238,9 @@ Defaulting to today."))
 		 (gnc:reldate-string-db 'lookup 'one-year-ahead-desc)
 		 gnc:get-one-year-ahead)))
 
-
-  (gnc:make-reldate-hash gnc:relative-date-hash gnc:relative-date-values)
-  (set! gnc:reldate-list
-	(map (lambda (x) (vector-ref x 0)) gnc:relative-date-values)))
+  ;; initialise gnc:relative-date-hash
+  (set! gnc:relative-date-hash (make-hash-table))
+  (for-each
+   (lambda (reldate)
+     (hash-set! gnc:relative-date-hash (gnc:reldate-get-symbol reldate) reldate))
+   gnc:relative-date-values))

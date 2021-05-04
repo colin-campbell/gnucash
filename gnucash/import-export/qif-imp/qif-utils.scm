@@ -23,72 +23,27 @@
 ;; Boston, MA  02110-1301,  USA       gnu@gnu.org
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(define-module (gnucash qif-import qif-utils))
 
-(use-modules (ice-9 regex))
+;; We do this initialization here because src/gnome isn't a real module.
+;; Note: Guile 2 needs to find the symbols from the extension at compile time already
+(eval-when (compile load eval expand)
+  (load-extension "libgnc-gnome" "scm_init_sw_gnome_module"))
+
+(use-modules (gnucash utilities))
+(use-modules (sw_gnome))
+(use-modules (srfi srfi-13))
+
+(export qif-import:canceled)
+(export qif-import:check-pause)
+(export qif-import:log)
+(export qif-import:reset-cancel-pause)
+(export qif-import:cancel)
+(export qif-import:canceled)
+(export qif-import:toggle-pause)
 
 (define qif-import:paused #f)
 (define qif-import:canceled #f)
-
-(define (simple-filter pred list)
-  (let ((retval '()))
-    (map (lambda (elt)
-           (if (pred elt)
-               (set! retval (cons elt retval))))
-         list)
-    (reverse retval)))
-
-(define remove-trailing-space-rexp 
-  (make-regexp "^(.*[^ ]+) *$"))
-
-(define remove-leading-space-rexp 
-  (make-regexp "^ *([^ ].*)$"))
-
-(define (string-remove-trailing-space str)
-  (let ((match (regexp-exec remove-trailing-space-rexp str)))
-    (if match
-        (string-copy (match:substring match 1))
-        "")))
-
-(define (string-remove-leading-space str)
-  (let ((match (regexp-exec remove-leading-space-rexp str)))
-    (if match 
-        (string-copy (match:substring match 1))
-        "")))
-
-(define (string-remove-char str char)
-  (let ((rexpstr 
-         (case char  
-           ((#\.) "\\.")
-           ((#\^) "\\^")
-           ((#\$) "\\$")
-           ((#\*) "\\*")
-           ((#\+) "\\+")
-           ((#\\) "\\\\")
-           ((#\?) "\\?")
-           (else 
-             (make-string 1 char)))))
-    (regexp-substitute/global #f rexpstr str 'pre 'post)))
-
-
-(define (string-char-count str char)
-  (length (simple-filter (lambda (elt) (eq? elt char))
-                         (string->list str))))
-
-
-(define (string-replace-char! str old new)
-  (let ((rexpstr 
-         (if (not (eq? old #\.))
-             (make-string 1 old)
-             "\\."))
-        (newstr (make-string 1 new)))
-    (regexp-substitute/global #f rexpstr str 'pre newstr 'post)))
-
-(define (string-to-canonical-symbol str)
-  (string->symbol 
-   (string-downcase
-    (string-remove-leading-space
-     (string-remove-trailing-space str)))))
-
 
 (define (qif-import:log progress-dialog proc str)
   (if progress-dialog
@@ -103,17 +58,14 @@
   (set! qif-import:canceled #t))
 
 (define (qif-import:toggle-pause progress-dialog)
-  (if qif-import:paused
-      (begin
-        (set! qif-import:paused #f)
-        (if progress-dialog
-            (gnc-progress-dialog-resume progress-dialog)))
-      (begin
-        (set! qif-import:paused #t)
-        (if progress-dialog
-            (gnc-progress-dialog-pause progress-dialog)))))
+  (cond
+   (qif-import:paused
+    (set! qif-import:paused #f)
+    (when progress-dialog (gnc-progress-dialog-resume progress-dialog)))
+   (else
+    (set! qif-import:paused #t)
+    (when progress-dialog (gnc-progress-dialog-pause progress-dialog)))))
 
 (define (qif-import:check-pause progress-dialog)
   (while (and qif-import:paused (not qif-import:canceled))
     (gnc-progress-dialog-update progress-dialog)))
-

@@ -132,7 +132,7 @@ typedef struct GncTreeModelPricePrivate
 } GncTreeModelPricePrivate;
 
 #define GNC_TREE_MODEL_PRICE_GET_PRIVATE(o)  \
-   (G_TYPE_INSTANCE_GET_PRIVATE ((o), GNC_TYPE_TREE_MODEL_PRICE, GncTreeModelPricePrivate))
+   ((GncTreeModelPricePrivate*)g_type_instance_get_private((GTypeInstance*)o, GNC_TYPE_TREE_MODEL_PRICE))
 
 /** A pointer to the parent class of a price tree model. */
 static GObjectClass *parent_class = NULL;
@@ -164,7 +164,7 @@ gnc_tree_model_price_init (GncTreeModelPrice *model)
     }
 
     priv = GNC_TREE_MODEL_PRICE_GET_PRIVATE(model);
-    priv->print_info = gnc_share_print_info_places(6);
+    priv->print_info = gnc_default_price_print_info(NULL);
 }
 
 static void
@@ -735,7 +735,7 @@ gnc_tree_model_price_get_value (GtkTreeModel *tree_model,
         g_value_set_string (value, gnc_commodity_get_printname (commodity));
         break;
     case GNC_TREE_MODEL_PRICE_COL_DATE:
-        qof_print_date_buff (datebuff, sizeof(datebuff),
+        qof_print_date_buff (datebuff, MAX_DATE_LENGTH,
                              gnc_price_get_time64 (price));
         g_value_init (value, G_TYPE_STRING);
         g_value_set_string (value, datebuff);
